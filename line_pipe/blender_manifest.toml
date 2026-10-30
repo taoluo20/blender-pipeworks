@@ -1,0 +1,13 @@
+schema_version = "1.0.0"
+id = "line_pipe"
+version = "0.1.1"
+name = "PipeWorks"
+tagline = "Draw solid procedural pipes with hold-to-turn routing"
+maintainer = "O_Pisces"
+type = "add-on"
+tags = ["3D View", "Add Mesh", "Modeling"]
+blender_version_min = "5.2.0"
+license = ["SPDX:GPL-3.0-or-later"]
+
+[build]
+paths_exclude_pattern = ["__pycache__/", "*.pyc"]
