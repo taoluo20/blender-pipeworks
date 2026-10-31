@@ -5,19 +5,26 @@ import os
 from pathlib import Path
 import runpy
 import sys
+import tomllib
 import traceback
 import bpy
 from bpy_extras import view3d_utils
 from mathutils import Vector
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / 'verification' / 'release-0.1.1'
+VERSION = tomllib.loads((ROOT / 'line_pipe' / 'blender_manifest.toml').read_text(encoding='utf8'))['version']
+OUT = ROOT / 'verification' / ('release-' + VERSION)
 OUT.mkdir(parents=True, exist_ok=True)
 assert Path(bpy.utils.user_resource('CONFIG')).is_relative_to(OUT)
 assert not bpy.data.filepath, 'Capture only in a disposable factory-startup scene'
-runpy.run_path(str(ROOT / 'tools' / 'build_example.py'), run_name='__main__')
+bpy.context.preferences.filepaths.temporary_directory = str(OUT)
+bpy.context.preferences.view.show_splash = False
+sys.path.insert(0, str(ROOT))
+bpy.ops.preferences.addon_enable(module='line_pipe')
 import line_pipe
 from line_pipe import operators
+assert bpy.context.preferences.addons['line_pipe'].preferences.guide_idle[:] == (1, 1, 1, 1)
+runpy.run_path(str(ROOT / 'tools' / 'build_example.py'), run_name='__main__')
 
 window = bpy.context.window_manager.windows[0]
 actions = []
@@ -32,14 +39,21 @@ def area_context():
     return {'window': window, 'area': area, 'region': region}
 
 
-def event(kind, value='NOTHING', point=None):
+def event(kind, value='NOTHING', point=None, **modifiers):
     global mouse
     if point is not None:
         mouse = tuple(int(v) for v in point)
-    window.event_simulate(type=kind, value=value, x=mouse[0], y=mouse[1])
+    window.event_simulate(type=kind, value=value, x=mouse[0], y=mouse[1], **modifiers)
 
 
 def capture(name):
+    operation = operators.session
+    if name == 'pipeworks-start-selector.png':
+        assert operation and operation.route is None and operation._start_mode == 'QUICK'
+    elif name == 'pipeworks-six-axis.png':
+        assert operation and operation.route.choosing_initial and operation._initial_choice == '+Z'
+    elif name == 'pipeworks-bend-preview.png':
+        assert operation and operation.route.turning and operation.route.candidate is not None
     context = area_context()
     space = context['area'].spaces.active
     assert space.region_3d.view_perspective == 'PERSP'
@@ -81,6 +95,13 @@ def aim():
     event('MOUSEMOVE', point=target + Vector((operation.region.x, operation.region.y)))
 
 
+def choose_origin():
+    operation = operators.session
+    assert operation and operation.route is None
+    target = operation._start_mouse + Vector((-48, 0))
+    event('MOUSEMOVE', point=target + Vector((operation.region.x, operation.region.y)))
+
+
 def prepare_modal():
     context = area_context()
     for obj in bpy.context.scene.objects:
@@ -88,7 +109,7 @@ def prepare_modal():
             hidden_examples.append(obj)
             obj.hide_set(True)
     view = context['area'].spaces.active.region_3d
-    view.view_location = (0, 0, .8)
+    view.view_location = (0, 0, .35)
     view.view_distance = 6
 
 
@@ -106,7 +127,9 @@ def restore_examples():
 
 
 def bend_move():
-    event('MOUSEMOVE', point=(mouse[0] + 85, mouse[1]))
+    operation = operators.session
+    target = operation._turn_mouse + Vector((85, 0))
+    event('MOUSEMOVE', point=target + Vector((operation.region.x, operation.region.y)))
 
 
 def finish():
@@ -114,6 +137,8 @@ def finish():
         'product': 'PipeWorks', 'screenshots': captures, 'perspective': True,
         'minimum_aspect_ratio': '16:9', 'self_authored_geometry': True,
         'source_module': line_pipe.__file__, 'blender': bpy.app.version_string,
+        'version': VERSION, 'default_arrow_rgba': list(line_pipe.data.GUIDE_IDLE),
+        'selected_arrow_rgba': list(line_pipe.data.GUIDE_ACTIVE),
         'no_active_drawing': operators.session is None,
     }, indent=2), encoding='utf8')
     bpy.ops.wm.quit_blender()
@@ -135,7 +160,8 @@ actions.extend([
     maximize, prepare_panel, lambda: capture('pipeworks-overview-en.png'),
     lambda: bpy.ops.line_pipe.language(), lambda: capture('pipeworks-overview-zh.png'),
     lambda: bpy.ops.line_pipe.language(), prepare_modal, begin,
-    lambda: event('P', 'PRESS'), lambda: event('P', 'RELEASE'), aim,
+    lambda: event('P', 'PRESS', ctrl=True), lambda: event('P', 'RELEASE'),
+    lambda: capture('pipeworks-start-selector.png'), choose_origin, aim,
     lambda: capture('pipeworks-six-axis.png'),
     lambda: event('B', 'PRESS'), bend_move,
     lambda: capture('pipeworks-bend-preview.png'),

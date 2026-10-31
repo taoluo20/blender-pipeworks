@@ -16,14 +16,26 @@ for key in ('BLENDER_USER_CONFIG', 'BLENDER_USER_SCRIPTS', 'BLENDER_USER_EXTENSI
     assert pathlib.Path(os.environ[key]).is_dir()
 assert pathlib.Path(bpy.utils.user_resource('CONFIG')).is_relative_to(OUT)
 module = 'bl_ext.user_default.line_pipe'
+custom_idle = (.12, .34, .56, .25)
+custom_active = (.91, .65, .28, .75)
+
+
+def close_color(actual, expected):
+    return all(abs(a - b) < 1e-6 for a, b in zip(actual, expected))
+
+
 if '--reload-preferences' in sys.argv:
     addon = importlib.import_module(module)
     assert addon.i18n.language() == 'ZH', 'language not restored in a new Blender process'
     assert addon._registered
+    assert all(close_color(a, b) for a, b in zip(addon.data.guide_colors(), (custom_idle, custom_active))), 'RGBA not restored'
+    bpy.ops.line_pipe.reset_guide_colors()
+    assert all(close_color(a, b) for a, b in zip(addon.data.guide_colors(), (addon.data.GUIDE_IDLE, addon.data.GUIDE_ACTIVE)))
     bpy.ops.line_pipe.language()
     assert addon.i18n.language() == 'EN'
     bpy.ops.wm.save_userpref()
-    (OUT / 'restart.json').write_text(json.dumps({'restored_chinese': True, 'reset_english': True}), encoding='utf8')
+    (OUT / 'restart.json').write_text(json.dumps({'restored_chinese': True, 'reset_english': True,
+        'restored_independent_RGBA': True, 'restored_default_colors': True}), encoding='utf8')
     print('PREFERENCE_RESTART_OK', flush=True)
 else:
     version = tomllib.loads((ROOT / 'line_pipe' / 'blender_manifest.toml').read_text(encoding='utf8'))['version']
@@ -31,6 +43,13 @@ else:
     bpy.ops.extensions.package_install_files(filepath=str(archive), repo='user_default', enable_on_install=True)
     addon = importlib.import_module(module)
     assert addon._registered and addon.i18n.language() == 'EN'
+    preferences = addon.data.guide_preferences()
+    assert isinstance(preferences, addon.data.LP_Preferences)
+    assert all(not preferences.is_property_set(key) for key in ('guide_idle', 'guide_active'))
+    assert all(close_color(a, b) for a, b in zip(addon.data.guide_colors(), (addon.data.GUIDE_IDLE, addon.data.GUIDE_ACTIVE)))
+    preferences.guide_idle, preferences.guide_active_zh = custom_idle, custom_active
+    assert bpy.context.preferences.is_dirty
+    assert all(close_color(a, b) for a, b in zip(addon.data.guide_colors(), (custom_idle, custom_active)))
     installed_manifest = tomllib.loads((pathlib.Path(addon.__file__).parent / 'blender_manifest.toml').read_text(encoding='utf8'))
     assert installed_manifest['name'] == 'PipeWorks' and installed_manifest['version'] == version
     assert addon.ui.LP_PT_main.bl_category == 'PipeWorks'
@@ -41,6 +60,7 @@ else:
     new_scene = bpy.data.scenes.new('Language persistence')
     bpy.context.window.scene = new_scene
     assert addon.i18n.language() == 'ZH' and new_scene.line_pipe_settings.language == 'EN'
+    assert all(close_color(a, b) for a, b in zip(addon.data.guide_colors(), (custom_idle, custom_active)))
     obj = addon.geometry.create(bpy.context)
     addon.geometry.update(obj, [(0, 0, 0), (2, 0, 0), (2, 0, 2)], .2, .4, 32, 16, store=True)
     obj['_line_pipe_dimensions'] = [.2, .4, 32, 16]

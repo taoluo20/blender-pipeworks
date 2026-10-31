@@ -61,16 +61,46 @@ def frame(direction):
     return u, heading.cross(u).normalized()
 
 
-def rounded_path(points, radius, steps):
-    """Sample tangent circular fillets without silently reducing the requested radius."""
+def bend_floor(diameter):
+    # mathutils coordinates are float32. Reserve only a rounding guard, not a gap.
+    return diameter / 2 + diameter * 2 ** -16
+
+
+def fillet_radii(points, radius, pipe_radius=0.0):
+    """Fit local radii under the maximum, sharing short segments between fillets."""
+    points = [Vector(p) for p in points]
+    if not math.isfinite(radius) or radius <= pipe_radius:
+        raise ValueError('bad_radius')
+    lengths = [(b - a).length for a, b in zip(points, points[1:])]
+    radii = [min(radius, before, after) for before, after in zip(lengths, lengths[1:])]
+    lower = bend_floor(pipe_radius * 2)
+    tolerance = max(pipe_radius * 2, min(radii, default=radius)) * 2 ** -22
+    if any(value < lower - tolerance or value <= pipe_radius for value in radii):
+        raise ValueError('fit')
+    for index, length in enumerate(lengths[1:-1]):
+        before, after = radii[index:index + 2]
+        if before + after > length:
+            # Share the available inner radii proportionally, preserving positivity.
+            available = length - 2 * lower
+            if available < -tolerance:
+                raise ValueError('fit')
+            inner_total = max(0.0, before - lower) + max(0.0, after - lower)
+            scale = max(0.0, available) / inner_total if inner_total else 0.0
+            radii[index] = lower + max(0.0, before - lower) * scale
+            radii[index + 1] = lower + max(0.0, after - lower) * scale
+    return radii
+
+
+def rounded_samples(points, radius, steps, pipe_radius=0.0):
+    """Return sampled positions and exact tangents, including zero-length straights."""
     points = [Vector(p) for p in points]
     if len(points) < 2:
-        return points
-    result = [points[0]]
+        return []
+    radii = fillet_radii(points, radius, pipe_radius)
+    result = [(points[0], (points[1] - points[0]).normalized())]
     for index in range(1, len(points) - 1):
         previous, corner, following = points[index - 1:index + 2]
         incoming, outgoing = corner - previous, following - corner
-        ilen, olen = incoming.length, outgoing.length
         incoming.normalize()
         outgoing.normalize()
         angle = math.acos(max(-1.0, min(1.0, incoming.dot(outgoing))))
@@ -78,26 +108,31 @@ def rounded_path(points, radius, steps):
             continue
         if abs(angle - math.pi / 2) > 1e-4:
             raise ValueError('Route corners must be perpendicular')
-        needed_before = radius * (2 if index > 1 else 1)
-        needed_after = radius * (2 if index < len(points) - 2 else 1)
-        if ilen + EPS < needed_before or olen + EPS < needed_after:
-            raise ValueError('Segment is too short for the bend radius')
-        start = corner - incoming * radius
-        center = start + outgoing * radius
+        local_radius = radii[index - 1]
+        start = corner - incoming * local_radius
+        center = start + outgoing * local_radius
         radial = -outgoing
-        if (result[-1] - start).length > EPS:
-            result.append(start)
+        tolerance = max(local_radius, pipe_radius * 2) * 2 ** -20
+        if (result[-1][0] - start).length > tolerance:
+            result.append((start, incoming))
         for step in range(1, steps + 1):
             theta = math.pi / 2 * step / steps
-            result.append(center + radius * (radial * math.cos(theta) + incoming * math.sin(theta)))
-    if (result[-1] - points[-1]).length > EPS:
-        result.append(points[-1])
+            position = center + local_radius * (radial * math.cos(theta) + incoming * math.sin(theta))
+            tangent = outgoing * math.sin(theta) + incoming * math.cos(theta)
+            result.append((position, tangent))
+    tolerance = max(radii[-1] if radii else (points[-1] - points[0]).length, pipe_radius * 2) * 2 ** -20
+    if (result[-1][0] - points[-1]).length > tolerance:
+        result.append((points[-1], (points[-1] - points[-2]).normalized()))
     return result
+
+
+def rounded_path(points, radius, steps, pipe_radius=0.0):
+    return [position for position, _ in rounded_samples(points, radius, steps, pipe_radius)]
 
 
 class Route:
     def __init__(self, origin, direction, diameter, radius, axis_initial=False):
-        if not all(math.isfinite(v) and v > 0 for v in (diameter, radius)) or radius <= diameter / 2:
+        if not all(math.isfinite(v) and v > 0 for v in (diameter, radius)) or radius < bend_floor(diameter):
             raise ValueError('bad_radius')
         self.points = [Vector(origin)]
         self.heading = Vector(direction).normalized()
@@ -121,16 +156,16 @@ class Route:
         self.extend(length)
 
     @property
-    def clearance(self):
-        return max(self.diameter * .02, EPS * 10)
-
-    @property
     def minimum(self):
-        return self.radius + self.clearance if len(self.points) > 1 else 0.0
+        return bend_floor(self.diameter) if len(self.points) > 1 else 0.0
 
     @property
     def turn_minimum(self):
-        return self.radius * (2 if len(self.points) > 1 else 1) + self.clearance
+        return bend_floor(self.diameter) * (2 if len(self.points) > 1 else 1)
+
+    @property
+    def preview_length(self):
+        return min(self.radius, self.length / (2 if len(self.points) > 1 else 1))
 
     @property
     def tip(self):
@@ -140,7 +175,7 @@ class Route:
         self.length = max(self.minimum, float(length))
 
     def begin_turn(self):
-        if self.length + EPS < self.turn_minimum:
+        if self.length < self.turn_minimum:
             return False
         self.turning, self.candidate = True, None
         return True
@@ -155,12 +190,13 @@ class Route:
 
     def release_turn(self):
         if self.turning and self.candidate is not None:
+            outgoing_length = self.preview_length
             self.history.append((self.heading.copy(), self.u.copy(), self.v.copy(), self.length))
             self.points.append(self.tip)
             rotation = self.heading.rotation_difference(self.candidate)
             self.u, self.v = rotation @ self.u, rotation @ self.v
             self.heading = self.candidate.copy()
-            self.length = self.minimum
+            self.length = outgoing_length
         self.turning, self.candidate = False, None
 
     def undo(self):
@@ -173,7 +209,7 @@ class Route:
     def route_points(self, preview=True):
         result = self.points + [self.tip]
         if preview and self.turning and self.candidate is not None:
-            result.append(self.tip + self.candidate * (self.radius + self.clearance))
+            result.append(self.tip + self.candidate * self.preview_length)
         return result
 
 

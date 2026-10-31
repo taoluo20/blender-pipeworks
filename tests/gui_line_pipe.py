@@ -123,10 +123,12 @@ def enqueue(function):
 
 
 def native_suite():
-    enqueue(lambda: event('P', 'PRESS'))
-    enqueue(lambda: check('P keymap starts quick-start waiting', operators.session is not None and operators.session.route is None))
+    enqueue(mouse_base)
+    enqueue(lambda: event('P', 'PRESS', ctrl=True))
+    enqueue(lambda: check('Ctrl+P starts selector waiting', operators.session is not None and operators.session.route is None))
     enqueue(lambda: event('P', 'RELEASE'))
-    enqueue(lambda: check('P tap starts exactly at world origin', operators.session.route.points[0].length < 1e-7))
+    enqueue(lambda: move(-50, 0))
+    enqueue(lambda: check('left gesture starts exactly at world origin', operators.session.route.points[0].length < 1e-7))
     for key in WORLD_AXES:
         enqueue(lambda key=key: aim_initial(key))
         enqueue(lambda key=key: check('P drag selects ' + key + ' before first bend',
@@ -144,9 +146,12 @@ def native_suite():
     enqueue(mouse_base)
     enqueue(lambda: extend(120))
     enqueue(lambda: event('ESC', 'PRESS'))
-    enqueue(lambda: event('P', 'PRESS'))
+    enqueue(mouse_base)
+    enqueue(lambda: event('P', 'PRESS', ctrl=True))
+    enqueue(lambda: event('P', 'RELEASE'))
+    enqueue(lambda: move(50, 0))
     enqueue(lambda: click_world((-4, 0, -.85)))
-    enqueue(lambda: check('P held plus native click starts on surface', operators.session.route is not None and abs(operators.session.route.points[0].z + .85) < .001))
+    enqueue(lambda: check('right gesture plus native click starts on surface', operators.session.route is not None and abs(operators.session.route.points[0].z + .85) < .001))
     enqueue(lambda: aim_initial('+Z'))
     enqueue(lambda: check('surface-picked P start can choose +Z', operators.session.route.heading.z > .999))
     enqueue(lambda: event('P', 'RELEASE'))
@@ -222,6 +227,8 @@ def finish_suite():
     with bpy.context.temp_override(**override()):
         bpy.ops.wm.save_as_mainfile(filepath=str(OUT / 'native-confirmed.blend'))
     print('UI COMPLETE', len(checks), flush=True)
+    if '--quit' in sys.argv:
+        bpy.app.timers.register(lambda: bpy.ops.wm.quit_blender() and None, first_interval=1)
 
 
 def tick():
@@ -256,6 +263,9 @@ def tick():
         (OUT / 'failure.txt').write_text(traceback.format_exc(), encoding='utf8')
         traceback.print_exc()
         events.clear()
+        if '--quit' in sys.argv:
+            bpy.ops.wm.quit_blender()
+            return None
     return .25
 
 

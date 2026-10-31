@@ -1,6 +1,6 @@
 schema_version = "1.0.0"
 id = "line_pipe"
-version = "0.1.1"
+version = "0.2.0"
 name = "PipeWorks"
 tagline = "Draw solid procedural pipes with hold-to-turn routing"
 maintainer = "O_Pisces"

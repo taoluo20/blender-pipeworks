@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 import bpy
-from . import i18n, operators
+from . import data, i18n, operators
 
 
 def dimensions(layout, settings, context):
@@ -26,6 +26,9 @@ class LP_PT_main(bpy.types.Panel):
         row.label(text=i18n.tr('title', context))
         row.operator('line_pipe.language', text='中文' if i18n.language(context) == 'EN' else 'English', icon='WORLD')
         settings = context.scene.line_pipe_settings
+        i18n.prop(layout, settings, 'follow_tip', context)
+        i18n.prop(layout, settings, 'show_guides', context)
+        data.draw_guide_colors(layout, context)
         col = layout.column()
         col.enabled = operators.session is None and context.mode == 'OBJECT'
         dimensions(col, settings, context)

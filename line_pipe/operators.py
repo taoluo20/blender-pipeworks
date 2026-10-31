@@ -9,9 +9,26 @@ from bpy_extras import view3d_utils
 from gpu_extras.batch import batch_for_shader
 from mathutils import Vector
 from . import data, geometry, i18n
-from .model import Route, WORLD_AXES, choose_initial_direction, initial_directions, choose_sector, turn_directions
+from .model import (Route, WORLD_AXES, choose_initial_direction, initial_directions,
+                    choose_sector, turn_directions, fillet_radii, bend_floor)
 
 session = None
+GUIDE_IDLE = data.GUIDE_IDLE
+GUIDE_ACTIVE = data.GUIDE_ACTIVE
+
+
+class LP_OT_reset_guide_colors(bpy.types.Operator):
+    bl_idname = 'line_pipe.reset_guide_colors'
+    bl_label = 'Restore Default Arrow Colors'
+
+    @classmethod
+    def description(cls, context, properties):
+        return i18n.tr('reset_guide_colors_tip', context)
+
+    def execute(self, context):
+        preferences = data.guide_preferences(context)
+        preferences.guide_idle, preferences.guide_active = GUIDE_IDLE, GUIDE_ACTIVE
+        return {'FINISHED'}
 
 
 class LP_OT_language(bpy.types.Operator):
@@ -63,6 +80,25 @@ def lines(vertices, color, width=2):
     batch_for_shader(shader, 'LINES', {'pos': vertices}).draw(shader)
 
 
+def axis_label(heading):
+    for key, axis in WORLD_AXES.items():
+        if heading.dot(axis) > .999:
+            return key
+    return ' / '.join('%+.2f' % value for value in heading)
+
+
+def screen_text(text, position, color=(.95, .95, .95, 1)):
+    blf.size(0, 13)
+    blf.color(0, *color)
+    blf.position(0, position[0], position[1], 0)
+    blf.draw(0, text)
+
+
+def format_length(value, units):
+    return (format(value, '.6g') if units.system == 'NONE' else
+            bpy.utils.units.to_string(units.system, 'LENGTH', value * units.scale_length, precision=6))
+
+
 class LP_OT_draw(bpy.types.Operator):
     bl_idname = 'line_pipe.draw'
     bl_label = 'Draw Pipe'
@@ -83,7 +119,7 @@ class LP_OT_draw(bpy.types.Operator):
             self.report({'WARNING'}, i18n.tr('busy', context))
             return {'CANCELLED'}
         settings = context.scene.line_pipe_settings
-        if settings.bend_radius <= settings.diameter / 2:
+        if settings.bend_radius < bend_floor(settings.diameter):
             self.report({'ERROR'}, i18n.tr('bad_radius', context))
             return {'CANCELLED'}
         self.area = context.area
@@ -95,8 +131,12 @@ class LP_OT_draw(bpy.types.Operator):
         self._aborted = False
         self._cleaned = False
         self._handles = []
-        self._navigation = False
         self._needs_rebase = True
+        self._view_state = self.view_state()
+        self._warp_pending = None
+        self._follow = settings.follow_tip
+        self._follow_offset = Vector((0, 0, 0))
+        self._start_mouse = self.mouse(event)
         self._notice = ''
         self._notice_until = 0
         self._selected = list(context.selected_objects)
@@ -145,27 +185,99 @@ class LP_OT_draw(bpy.types.Operator):
         self.obj.select_set(True)
         context.view_layer.objects.active = self.obj
         self._needs_rebase = True
+        if self._follow:
+            self.rv3d.view_location = self.route.tip
+            self._view_state = self.view_state()
+
+    def view_state(self):
+        return (tuple(self.rv3d.view_rotation), tuple(self.rv3d.view_location),
+                self.rv3d.view_distance, self.rv3d.view_perspective)
+
+    def sync_view(self, context):
+        state = self.view_state()
+        if state != self._view_state:
+            self._needs_rebase = True
+            self._warp_pending = None
+            if self.route:
+                self._follow_offset = self.rv3d.view_location - self.route.tip
+                if self.route.turning:
+                    self.route.candidate = None
+            self._view_state = state
+        follow = context.scene.line_pipe_settings.follow_tip
+        if follow != self._follow:
+            self._follow = follow
+            self._needs_rebase = True
+            self._warp_pending = None
+            if follow and self.route:
+                self._follow_offset = Vector((0, 0, 0))
+                self.rv3d.view_location = self.route.tip
+                self._view_state = self.view_state()
+
+    def follow(self):
+        if self._follow and self.route:
+            self.rv3d.view_location = self.route.tip + self._follow_offset
+            self._view_state = self.view_state()
+
+    def wrap_pointer(self, event):
+        if not self._follow:
+            return
+        p = self.mouse(event)
+        target = p.copy()
+        left, right = self.viewport_bounds()
+        margin = 24
+        if right - left < margin * 6 or self.region.height < margin * 6:
+            return
+        for axis, low, high in ((0, left, right), (1, 0, self.region.height)):
+            if p[axis] < low + margin:
+                target[axis] = high - margin * 2
+            elif p[axis] > high - margin:
+                target[axis] = low + margin * 2
+        target = Vector((round(target.x), round(target.y)))
+        if (target - p).length > 1:
+            # Shift the anchor with the cursor so the synthetic move adds no length.
+            self._mouse_base += target - p
+            self._warp_pending = target
+            self.window.cursor_warp(int(self.region.x + target.x), int(self.region.y + target.y))
+
+    def viewport_bounds(self):
+        left, right = 0, self.region.width
+        space = self.area.spaces.active
+        for region in self.area.regions:
+            if ((region.type == 'UI' and space.show_region_ui or
+                 region.type == 'TOOLS' and space.show_region_toolbar) and region.width > 1):
+                if region.x <= self.region.x:
+                    left = max(left, region.x + region.width - self.region.x)
+                else:
+                    right = min(right, region.x - self.region.x)
+        return left, right
 
     def mouse(self, event):
         return Vector((event.mouse_x - self.region.x, event.mouse_y - self.region.y))
 
     def inside(self, event):
         p = self.mouse(event)
-        return 0 <= p.x < self.region.width and 0 <= p.y < self.region.height
+        left, right = self.viewport_bounds()
+        return left <= p.x < right and 0 <= p.y < self.region.height
 
     def project(self, position):
         return view3d_utils.location_3d_to_region_2d(self.region, self.rv3d, position)
 
     def rebase(self, event):
+        self.follow()
+        self.rv3d.update()
         self._mouse_base = self.mouse(event)
         self._length_base = self.route.length
+        self._warp_pending = None
+        depth = self.route.tip
+        a = view3d_utils.region_2d_to_location_3d(self.region, self.rv3d, self._mouse_base, depth)
+        b = view3d_utils.region_2d_to_location_3d(self.region, self.rv3d, self._mouse_base + Vector((0, 1)), depth)
+        pixel_size = (b - a).length
+        inv_view = self.rv3d.view_rotation.inverted()
+        projected = (inv_view @ self.route.heading).xy
+        self._extension_scale = (projected.normalized() * pixel_size / projected.length
+                                 if projected.length > .15 else Vector((0, pixel_size)))
         if self.route.choosing_initial:
-            inv_view = self.rv3d.view_rotation.inverted()
             self._initial_directions = initial_directions(lambda axis: (inv_view @ axis).xy)
-            origin = self.route.points[0]
-            a = view3d_utils.region_2d_to_location_3d(self.region, self.rv3d, self._mouse_base, origin)
-            b = view3d_utils.region_2d_to_location_3d(self.region, self.rv3d, self._mouse_base + Vector((0, 1)), origin)
-            pixel_size = (b - a).length
             self._initial_scales = {key: pixel_size / max((inv_view @ axis).xy.length, .2)
                                     for key, axis in WORLD_AXES.items()}
             self._initial_choice = next((key for key, axis in WORLD_AXES.items()
@@ -173,6 +285,9 @@ class LP_OT_draw(bpy.types.Operator):
             self._initial_base = (self._initial_directions[self._initial_choice] *
                                   (self.route.length / self._initial_scales[self._initial_choice])
                                   if self._initial_choice else Vector((0, 0)))
+        if self.route.turning:
+            self._turn_mouse = self.mouse(event)
+            self._directions = turn_directions(self.route.u, self.route.v, lambda value: (inv_view @ value).xy)
         self._needs_rebase = False
 
     def extension(self, event):
@@ -187,24 +302,14 @@ class LP_OT_draw(bpy.types.Operator):
                 self.route.aim_initial(choice, displacement.dot(self._initial_directions[choice]) * self._initial_scales[choice])
                 self._initial_choice = choice
             return
-        # Convert screen displacement at the live tip's depth, without perspective
-        # drift from recomputing the reference plane on every mouse event.
-        depth = self.route.points[-1] + self.route.heading * self._length_base
-        a = view3d_utils.region_2d_to_location_3d(self.region, self.rv3d, self._mouse_base, depth)
-        b = view3d_utils.region_2d_to_location_3d(self.region, self.rv3d, self._mouse_base + Vector((0, 1)), depth)
-        pixel_size = (b - a).length
-        screen_direction = self.rv3d.view_rotation.inverted() @ self.route.heading
-        projected = Vector((screen_direction.x, screen_direction.y))
-        if projected.length > .15:
-            distance = delta.dot(projected.normalized()) * pixel_size / projected.length
-        else:
-            distance = delta.y * pixel_size
-        self.route.extend(self._length_base + distance)
+        # Navigation rebases this scale; following the tip does not change it.
+        self.route.extend(self._length_base + delta.dot(self._extension_scale))
 
     def begin_turn(self, context, event):
         if not self.route.begin_turn():
             self.notice(context, 'too_short', length=self.route.turn_minimum)
             return
+        self._notice = ''
         self._turn_mouse = self.mouse(event)
         inv_view = self.rv3d.view_rotation.inverted()
         self._directions = turn_directions(self.route.u, self.route.v,
@@ -212,14 +317,15 @@ class LP_OT_draw(bpy.types.Operator):
 
     def notice(self, context, key, **values):
         import time
-        self._notice = i18n.tr(key, context, **values)
+        self._notice = (key, values)
         self._notice_until = time.monotonic() + 2.5
         self.status(context)
 
     def status(self, context):
         import time
         if self._notice and time.monotonic() < self._notice_until:
-            message = self._notice
+            key, values = self._notice
+            message = i18n.tr(key, context, **values)
         else:
             key = ('turning' if self.route.turning else 'initial' if self.route.choosing_initial else 'drawing') if self.route else (
                 'quick_wait' if self._start_mode == 'QUICK' else
@@ -230,6 +336,7 @@ class LP_OT_draw(bpy.types.Operator):
 
     def refresh(self):
         if self.route:
+            self.follow()
             geometry.update(self.obj, self.route.route_points(), self._diameter, self._radius,
                             self._sides, self._steps)
         self.area.tag_redraw()
@@ -244,22 +351,33 @@ class LP_OT_draw(bpy.types.Operator):
             if event.type in {'ESC', 'RIGHTMOUSE', 'WINDOW_DEACTIVATE'}:
                 self.cleanup(context, cancel=True)
                 return {'CANCELLED'}
+            self.sync_view(context)
             if event.type == 'TIMER':
                 self.status(context)
+                self.area.tag_redraw()
                 return {'RUNNING_MODAL'}
             if event.type == 'MIDDLEMOUSE':
-                self._navigation = event.value == 'PRESS'
                 self._needs_rebase = True
                 return {'PASS_THROUGH'}
             if event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE', 'TRACKPADPAN', 'TRACKPADZOOM', 'NDOF_MOTION'}:
                 self._needs_rebase = True
                 return {'PASS_THROUGH'}
-            if self._navigation:
-                return {'PASS_THROUGH'}
-            if self._start_mode == 'QUICK' and self.route is None and event.type == 'P' and event.value == 'RELEASE':
-                self.start(context, Vector((0, 0, 0)), direction(context.scene.line_pipe_settings))
-                self.rebase(event)
-                self.refresh()
+            if event.type == 'F' and event.ctrl and event.value == 'PRESS' and not event.is_repeat:
+                settings = context.scene.line_pipe_settings
+                settings.follow_tip = not settings.follow_tip
+                self.sync_view(context)
+                self.area.tag_redraw()
+            elif self._start_mode == 'QUICK' and self.route is None:
+                if event.type == 'MOUSEMOVE' and self.inside(event):
+                    delta = self.mouse(event) - self._start_mouse
+                    if abs(delta.x) >= 32 and abs(delta.x) >= abs(delta.y):
+                        if delta.x < 0:
+                            self.start(context, Vector((0, 0, 0)), direction(context.scene.line_pipe_settings))
+                            self.rebase(event)
+                            self.refresh()
+                        else:
+                            self._start_mode = 'SURFACE'
+                self.area.tag_redraw()
             elif self.route and event.type == self._turn_key and event.value == 'RELEASE':
                 self.route.release_turn()
                 self.rebase(event)
@@ -284,7 +402,8 @@ class LP_OT_draw(bpy.types.Operator):
                     self.route.undo()
                     self.rebase(event)
                     self.refresh()
-            elif not self.inside(event):
+            elif not self.inside(event) and not (self.route and self._follow and
+                    event.type == 'MOUSEMOVE' and not self.route.turning):
                 return {'PASS_THROUGH'}
             elif not self.route:
                 if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
@@ -304,9 +423,16 @@ class LP_OT_draw(bpy.types.Operator):
                     self.start(context, point, direction(settings, normal))
                     self.rebase(event)
                     self.refresh()
-            elif event.type == self._turn_key and event.value == 'PRESS' and not event.is_repeat:
+            elif event.type == self._turn_key and event.value == 'PRESS' and not event.is_repeat and not event.ctrl:
+                if self._needs_rebase:
+                    self.rebase(event)
                 self.begin_turn(context, event)
             elif event.type == 'MOUSEMOVE':
+                if self._warp_pending is not None:
+                    target = self._warp_pending
+                    self._warp_pending = None
+                    if (self.mouse(event) - target).length <= 1:
+                        return {'RUNNING_MODAL'}
                 if self._needs_rebase:
                     self.rebase(event)
                 elif self.route.turning:
@@ -316,6 +442,7 @@ class LP_OT_draw(bpy.types.Operator):
                         self.route.choose(self._directions[sector])
                 else:
                     self.extension(event)
+                    self.wrap_pointer(event)
                 self.refresh()
             self.status(context)
             return {'RUNNING_MODAL'}
@@ -325,9 +452,11 @@ class LP_OT_draw(bpy.types.Operator):
             return {'CANCELLED'}
 
     def draw_world(self):
-        if bpy.context.area != self.area or not self.route:
+        if (bpy.context.area != self.area or not self.route or
+                not bpy.context.scene.line_pipe_settings.show_guides):
             return
         try:
+            idle, active = data.guide_colors()
             gpu.state.blend_set('ALPHA')
             gpu.state.depth_test_set('NONE')
             points = self.route.route_points()
@@ -340,21 +469,58 @@ class LP_OT_draw(bpy.types.Operator):
                 for heading in self._directions.values():
                     selected = self.route.candidate is not None and heading.dot(self.route.candidate) > .99
                     lines([tuple(tip), tuple(tip + heading * distance)],
-                          (1, .7, .13, 1) if selected else (.6, .7, .75, .45), 4 if selected else 2)
+                          active if selected else idle, 4 if selected else 2)
         finally:
             gpu.state.line_width_set(1)
             gpu.state.depth_test_set('NONE')
             gpu.state.blend_set('NONE')
 
     def draw_screen(self):
-        if bpy.context.area != self.area or not self.route:
+        if bpy.context.area != self.area:
+            return
+        idle, active = data.guide_colors()
+        if self._start_mode == 'QUICK' and not self.route:
+            left, right = self.viewport_bounds()
+            center = Vector((max(left + 160, min(right - 160, self._start_mouse.x)),
+                             max(65, min(self.region.height - 65, self._start_mouse.y))))
+            gpu.state.blend_set('ALPHA')
+            try:
+                for sign, key in ((-1, 'origin_choice'), (1, 'surface_choice')):
+                    end = center + Vector((sign * 90, 0))
+                    lines([tuple(center + Vector((sign * 16, 0))), tuple(end), tuple(end),
+                           tuple(end + Vector((-sign * 10, 6))), tuple(end),
+                           tuple(end + Vector((-sign * 10, -6)))], idle, 3)
+                    label = i18n.tr(key)
+                    blf.size(0, 13)
+                    text_width = blf.dimensions(0, label)[0]
+                    screen_text(label, (center.x + sign * 85 - text_width / 2, center.y + 18))
+            finally:
+                gpu.state.line_width_set(1)
+                gpu.state.blend_set('NONE')
+            return
+        if not self.route or not bpy.context.scene.line_pipe_settings.show_guides:
             return
         initial = self.route.choosing_initial and hasattr(self, '_initial_directions')
+        settings = bpy.context.scene.unit_settings
+        length = format_length(self.route.length, settings)
+        screen_text(i18n.tr('live_length', length=length), (24, 70))
+        radii = fillet_radii(self.route.route_points(), self._radius, self._diameter / 2)
+        if radii:
+            screen_text(i18n.tr('live_radius', radius=format_length(radii[-1], settings)), (24, 26))
+        if self.route.turning:
+            screen_text(i18n.tr('bend_angle' if self.route.candidate is not None else 'no_bend'), (24, 48))
         if not self.route.turning and not initial:
             return
         gpu.state.blend_set('ALPHA')
         try:
-            center = self._mouse_base - self._initial_base if initial else self._turn_mouse
+            anchor = self.project(self.route.points[0] if initial else self.route.tip)
+            if anchor is None:
+                return
+            left, right = self.viewport_bounds()
+            center = Vector((max(left + 100, min(right - 100, anchor.x)),
+                             max(100, min(self.region.height - 100, anchor.y))))
+            if (center - anchor).length > 1:
+                lines([tuple(anchor), tuple(center)], idle, 1)
             arrows = ({key: value * 80 for key, value in self._initial_directions.items()} if initial else
                       {'RIGHT': (65, 0), 'LEFT': (-65, 0), 'UP': (0, 65), 'DOWN': (0, -65)})
             for sector, delta in arrows.items():
@@ -366,12 +532,8 @@ class LP_OT_draw(bpy.types.Operator):
                 heading = WORLD_AXES[sector] if initial else self._directions[sector]
                 selected = self._initial_choice == sector if initial else (
                     self.route.candidate is not None and self.route.candidate.dot(heading) > .99)
-                color = ({'X': (.95, .3, .3, .9), 'Y': (.35, .85, .4, .9), 'Z': (.35, .6, 1, .9)}[sector[1]]
-                         if initial else (.7, .8, .85, .85))
-                lines([tuple(v) for v in vertices], (1, .7, .13, 1) if selected else color, 3)
-                label = sector if initial else '/'.join(('%+.1f' % value) for value in heading) if max(abs(v) for v in heading) < .99 else (
-                    ('+' if heading[max(range(3), key=lambda i: abs(heading[i]))] > 0 else '-') +
-                    'XYZ'[max(range(3), key=lambda i: abs(heading[i]))])
+                lines([tuple(v) for v in vertices], active if selected else idle, 3)
+                label = sector if initial else axis_label(heading)
                 blf.size(0, 12)
                 blf.color(0, .95, .95, .95, 1)
                 blf.position(0, end.x - 10, end.y + 12, 0)
@@ -385,11 +547,14 @@ class LP_OT_draw(bpy.types.Operator):
         if self._cleaned:
             return
         self._cleaned = True
+        self._warp_pending = None
         session = None
         for handle in self._handles:
             bpy.types.SpaceView3D.draw_handler_remove(handle, 'WINDOW')
+        self._handles.clear()
         if hasattr(self, '_timer'):
             context.window_manager.event_timer_remove(self._timer)
+            del self._timer
         if any(area == self.area for area in context.screen.areas):
             self.area.header_text_set(None)
             self.area.tag_redraw()
@@ -436,4 +601,4 @@ def abort(_=None):
         operation.cleanup(bpy.context, cancel=True)
 
 
-CLASSES = (LP_OT_language, LP_OT_draw, LP_OT_mesh)
+CLASSES = (LP_OT_language, LP_OT_reset_guide_colors, LP_OT_draw, LP_OT_mesh)

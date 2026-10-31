@@ -62,8 +62,39 @@ settings = bpy.context.scene.line_pipe_settings
 check('English default', i18n.language() == 'EN')
 check('B is default hold key', settings.turn_key == 'B')
 check('new panels default to six-axis mouse direction', settings.direction == 'AUTO')
+check('helpers default on and following is opt-in', settings.show_guides and not settings.follow_tip)
+def close_color(actual, expected):
+    return all(abs(a - b) < 1e-6 for a, b in zip(actual, expected))
+
+
+colors = data.guide_preferences()
+check('source import falls back without an enabled preferences entry', isinstance(colors, data.LP_GuideColors))
+check('factory arrow colors are white and warm yellow', all(close_color(a, b) for a, b in
+      zip(data.guide_colors(), (data.GUIDE_IDLE, data.GUIDE_ACTIVE))))
+check('native color controls use display-space RGBA', all(colors.bl_rna.properties[key].subtype == 'COLOR_GAMMA'
+      and colors.bl_rna.properties[key].array_length == 4 for key in ('guide_idle', 'guide_active')))
+colors.guide_idle = (.2, .3, .4, .25)
+check('normal arrow color and alpha edit independently', close_color(data.guide_colors()[0], (.2, .3, .4, .25))
+      and close_color(data.guide_colors()[1], data.GUIDE_ACTIVE))
+colors.guide_active_zh = (.7, .6, .5, .4)
+check('Chinese arrow color alias shares RGBA storage', close_color(colors.guide_active, (.7, .6, .5, .4)))
+check('color tooltips are localized', 'opacity' in colors.bl_rna.properties['guide_idle'].description
+      and '透明度' in colors.bl_rna.properties['guide_active_zh'].description)
+bpy.ops.line_pipe.reset_guide_colors()
+check('one action restores both factory colors and alpha', all(close_color(a, b) for a, b in
+      zip(data.guide_colors(), (data.GUIDE_IDLE, data.GUIDE_ACTIVE))))
+settings.follow_tip_zh = True
+settings.show_guides_zh = False
+check('Chinese interaction toggles share English storage', settings.follow_tip and not settings.show_guides)
+settings.follow_tip, settings.show_guides = False, True
+check('localized interaction tooltips', 'Ctrl+F' in settings.bl_rna.properties['follow_tip_zh'].description
+      and '角度' in settings.bl_rna.properties['show_guides_zh'].description)
+for key, axis in WORLD_AXES.items():
+    check('signed bend label ' + key, operators.axis_label(axis) == key)
 bpy.ops.line_pipe.language()
 check('one action switches to Chinese', i18n.language() == 'ZH' and i18n.tr('draw') == '绘制管道')
+check('Chinese color controls and restore tooltip', i18n.tr('guide_colors') == '箭头颜色'
+      and '暖黄色' in operators.LP_OT_reset_guide_colors.description(bpy.context, None))
 settings.diameter_zh = .3
 check('Chinese dimension alias shares English storage', abs(settings.diameter - .3) < 1e-6)
 settings.start_mode_zh = 'COORDINATES'
@@ -151,7 +182,9 @@ new = solid(spatial)
 check('diameter edit changes evaluated solid volume', abs(new[2] / old[2] - 2.25) < .03)
 previous_radius = spatial.line_pipe.bend_radius
 spatial.line_pipe.bend_radius = 10
-check('oversized bend radius rolls back with localized error code', abs(spatial.line_pipe.bend_radius - previous_radius) < 1e-6 and spatial.line_pipe.error == 'fit')
+check('maximum radius fits local bends without moving route corners', spatial.line_pipe.bend_radius == 10
+      and spatial.line_pipe.error == '' and spatial.get('line_pipe_route_v1') is not None)
+spatial.line_pipe.bend_radius = previous_radius
 spatial.line_pipe.diameter = 2
 check('impossible diameter rolls back', abs(spatial.line_pipe.diameter - .3) < 1e-6 and spatial.line_pipe.error == 'bad_radius')
 spatial.line_pipe.bend_radius = .5

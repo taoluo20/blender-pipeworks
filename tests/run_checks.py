@@ -18,6 +18,7 @@ out = ROOT / 'verification' / 'line-pipe'
 out.mkdir(parents=True, exist_ok=True)
 jobs = [
     ('integration', ['--factory-startup', '--python', 'tests/check_line_pipe.py'], out / 'backend-user'),
+    ('compact', ['--factory-startup', '--python', 'tests/check_compact_bends.py'], out / 'compact-user'),
     ('installed', ['--factory-startup', '--python', 'tests/check_installed_line_pipe.py'], out / 'install-user'),
     ('restart', ['--python', 'tests/check_installed_line_pipe.py', '--', '--reload-preferences'], out / 'install-user'),
 ]
