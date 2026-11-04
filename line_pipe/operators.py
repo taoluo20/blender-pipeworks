@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 import json
 import math
+from dataclasses import dataclass
 import bpy
 import blf
 import gpu
@@ -15,6 +16,17 @@ from .model import (Route, WORLD_AXES, choose_initial_direction, initial_directi
 session = None
 GUIDE_IDLE = data.GUIDE_IDLE
 GUIDE_ACTIVE = data.GUIDE_ACTIVE
+NAVIGATION_GAIN = .5
+NATIVE_NAVIGATION = {'VIEW3D_OT_rotate', 'VIEW3D_OT_move', 'VIEW3D_OT_zoom', 'VIEW3D_OT_dolly'}
+
+
+@dataclass
+class Insertion:
+    preview: object
+    route: Route
+    drawn: bool
+    fitting: object
+    ports: tuple[str, str]
 
 
 class LP_OT_reset_guide_colors(bpy.types.Operator):
@@ -122,18 +134,22 @@ class LP_OT_draw(bpy.types.Operator):
         if settings.bend_radius < bend_floor(settings.diameter):
             self.report({'ERROR'}, i18n.tr('bad_radius', context))
             return {'CANCELLED'}
+        settings.tool_mode = 'DRAW'
         self.area = context.area
         self.region = next(r for r in self.area.regions if r.type == 'WINDOW')
         self.rv3d = context.space_data.region_3d
         self.window = context.window
         self.route = None
         self.obj = None
+        self._insertions = []
         self._aborted = False
         self._cleaned = False
         self._handles = []
         self._needs_rebase = True
         self._view_state = self.view_state()
         self._warp_pending = None
+        self._navigation_timer = None
+        self._navigation_feedback = None
         self._follow = settings.follow_tip
         self._follow_offset = Vector((0, 0, 0))
         self._start_mouse = self.mouse(event)
@@ -143,9 +159,13 @@ class LP_OT_draw(bpy.types.Operator):
         self._active = context.active_object
         self._turn_key = settings.turn_key
         self._diameter, self._radius = settings.diameter, settings.bend_radius
-        self._sides, self._steps = settings.radial_segments, settings.bend_steps
+        self._sides, self._steps = data.generation_sides(settings), settings.bend_steps
+        self._free_sides = settings.free_sides
+        self._fitting_id = settings.continuation_fitting
         self._start_mode = 'QUICK' if self.quick_start else settings.start_mode
         try:
+            self._bore = data.bore(settings)
+            self._wall_profile = tuple(getattr(settings, key) for key in data.PROFILE)
             if self.quick_start:
                 pass
             elif settings.start_mode == 'CURSOR':
@@ -177,7 +197,7 @@ class LP_OT_draw(bpy.types.Operator):
     def start(self, context, origin, heading):
         self.route = Route(origin, heading, self._diameter, self._radius,
                            axis_initial=self.quick_start or context.scene.line_pipe_settings.direction == 'AUTO')
-        self.obj = geometry.create(context)
+        self.obj = geometry.create(context, mesh=bool(self._bore))
         self.obj.location = origin
         self.obj.hide_render = True
         for selected in context.selected_objects:
@@ -262,12 +282,23 @@ class LP_OT_draw(bpy.types.Operator):
     def project(self, position):
         return view3d_utils.location_3d_to_region_2d(self.region, self.rv3d, position)
 
+    def guide_center(self, anchor):
+        left, right = self.viewport_bounds()
+        if anchor is None:
+            return Vector(((left + right) / 2, self.region.height / 2))
+        margin_x = min(100, (right - left) / 2)
+        margin_y = min(100, self.region.height / 2)
+        return Vector((max(left + margin_x, min(right - margin_x, anchor.x)),
+                       max(margin_y, min(self.region.height - margin_y, anchor.y))))
+
     def rebase(self, event):
         self.follow()
         self.rv3d.update()
-        self._mouse_base = self.mouse(event)
+        # A fast key release can arrive before cursor_warp's OS mouse move.
+        # Rebase at the destination and keep ignoring that pending synthetic move.
+        self._mouse_base = (self._warp_pending.copy() if self._warp_pending is not None
+                            else self.mouse(event))
         self._length_base = self.route.length
-        self._warp_pending = None
         depth = self.route.tip
         a = view3d_utils.region_2d_to_location_3d(self.region, self.rv3d, self._mouse_base, depth)
         b = view3d_utils.region_2d_to_location_3d(self.region, self.rv3d, self._mouse_base + Vector((0, 1)), depth)
@@ -286,7 +317,7 @@ class LP_OT_draw(bpy.types.Operator):
                                   (self.route.length / self._initial_scales[self._initial_choice])
                                   if self._initial_choice else Vector((0, 0)))
         if self.route.turning:
-            self._turn_mouse = self.mouse(event)
+            self._turn_mouse = self._mouse_base.copy()
             self._directions = turn_directions(self.route.u, self.route.v, lambda value: (inv_view @ value).xy)
         self._needs_rebase = False
 
@@ -305,12 +336,53 @@ class LP_OT_draw(bpy.types.Operator):
         # Navigation rebases this scale; following the tip does not change it.
         self.route.extend(self._length_base + delta.dot(self._extension_scale))
 
+    def native_navigation_active(self):
+        return any(op and op.bl_idname in NATIVE_NAVIGATION for op in self.window.modal_operators)
+
+    def queue_navigation_feedback(self, context, event):
+        if not self.route or event.alt or not self.inside(event) or self._navigation_timer or self._navigation_feedback:
+            return
+        self.rebase(event)
+        self._navigation_mouse = self.mouse(event)
+        self._navigation_length = self.route.length
+        self._navigation_scale = self._extension_scale.copy()
+
+        def attach():
+            self._navigation_timer = None
+            if session is self and not self._cleaned and self.native_navigation_active():
+                with bpy.context.temp_override(window=self.window, area=self.area, region=self.region):
+                    bpy.ops.line_pipe.navigation_feedback('INVOKE_DEFAULT')
+            return None
+
+        # Native viewport operators consume their mouse moves. Attach above that
+        # handler after the original MMB press has reached Blender's keymap.
+        self._navigation_timer = attach
+        bpy.app.timers.register(attach, first_interval=0)
+
+    def navigation_feedback(self, event):
+        if not self.route or self.route.turning:
+            return
+        delta = self.mouse(event) - self._navigation_mouse
+        self.route.extend(self._navigation_length + NAVIGATION_GAIN * delta.dot(self._navigation_scale))
+        # Leave camera movement entirely to native navigation, including with Follow Tip on.
+        geometry.update(self.obj, self.route.route_points(), self._diameter, self._radius,
+                        self._sides, self._steps, bore=self._bore)
+        self.area.tag_redraw()
+
     def begin_turn(self, context, event):
+        if self.route.turning:
+            return
         if not self.route.begin_turn():
             self.notice(context, 'too_short', length=self.route.turn_minimum)
             return
         self._notice = ''
-        self._turn_mouse = self.mouse(event)
+        self.rv3d.update()
+        # Share the guides' safe visible anchor, including when the tip is offscreen.
+        center = self.guide_center(self.project(self.route.tip))
+        self._turn_mouse = Vector((round(center.x), round(center.y)))
+        self._warp_pending = self._turn_mouse.copy()
+        self.window.cursor_warp(int(self.region.x + self._turn_mouse.x),
+                                int(self.region.y + self._turn_mouse.y))
         inv_view = self.rv3d.view_rotation.inverted()
         self._directions = turn_directions(self.route.u, self.route.v,
                                            lambda value: (inv_view @ value).xy)
@@ -327,7 +399,8 @@ class LP_OT_draw(bpy.types.Operator):
             key, values = self._notice
             message = i18n.tr(key, context, **values)
         else:
-            key = ('turning' if self.route.turning else 'initial' if self.route.choosing_initial else 'drawing') if self.route else (
+            key = ('navigating' if self._navigation_feedback else
+                   'turning' if self.route.turning else 'initial' if self.route.choosing_initial else 'drawing') if self.route else (
                 'quick_wait' if self._start_mode == 'QUICK' else
                 'surface_wait' if self._start_mode == 'SURFACE' else 'waiting')
             message = i18n.tr(key, context, turn_key=self._turn_key) if key in ('turning', 'initial', 'drawing') else i18n.tr(key, context)
@@ -338,8 +411,135 @@ class LP_OT_draw(bpy.types.Operator):
         if self.route:
             self.follow()
             geometry.update(self.obj, self.route.route_points(), self._diameter, self._radius,
-                            self._sides, self._steps)
+                            self._sides, self._steps, bore=self._bore)
         self.area.tag_redraw()
+
+    def freeze_segment(self):
+        dimensions = (self._diameter, self._radius, self._sides, self._steps)
+        geometry.update(self.obj, self.route.route_points(False), *dimensions, store=True, bore=self._bore)
+        data.store_parameters(self.obj, *dimensions, self._wall_profile, self._free_sides)
+
+    def insert_fitting(self, context, event):
+        from . import connections, fittings, ports
+        drawn = self.route is not None and self.route.length > 1e-7
+        if self.route is None or (not drawn and not self._insertions):
+            self.notice(context, 'continuation_needs_pipe')
+            return
+        if self.route.turning:
+            self.notice(context, 'continuation_finish_bend')
+            return
+
+        part, preview = None, None
+        try:
+            part = fittings.fitted_continuation(context, self._fitting_id, self._diameter, self._bore, self._sides)
+            part.hide_render = True
+            if drawn:
+                self.freeze_segment()
+            reference = self.obj if drawn else self._insertions[-1].fitting
+            reference_key = 'END' if drawn else self._insertions[-1].ports[1]
+            fitting_keys = fittings.continuation_keys(part)
+            context.view_layer.update()
+            anchor = ports.read(context.scene, reference, reference_key)
+            inlet = ports.read(context.scene, part, fitting_keys[0])
+            ports.compatible(inlet, anchor)
+            matrices, _ = connections.docking_matrices(context.scene, inlet, anchor, 0)
+            connections.set_matrices(matrices)
+            outlet = ports.read(context.scene, part, fitting_keys[1])
+            next_route = Route(outlet.position, outlet.direction, self._diameter, self._radius)
+            preview = geometry.create(context, mesh=True)
+            preview.location = outlet.position
+            preview.hide_render = True
+            frames = {'start_radial': list(outlet.radial)}
+            if outlet.bore:
+                frames['start_inner'] = list(outlet.inner_radial)
+            preview[geometry.SWEEP_FRAMES] = json.dumps(frames)
+        except (ValueError, RuntimeError, OSError) as error:
+            geometry.remove(preview)
+            geometry.remove(part)
+            key = str(error)
+            self.notice(context, key if key in i18n.MESSAGES else 'error',
+                        error=key, **getattr(error, 'details', {}))
+            return
+
+        self._insertions.append(Insertion(self.obj, self.route, drawn, part, fitting_keys))
+        self.obj, self.route = preview, next_route
+        fittings.select_object(context, preview)
+        self.follow()
+        self.rebase(event)
+        self.notice(context, 'continuation_added', name=fittings.continuation_name(self._fitting_id, context))
+
+    def undo_segment(self, context):
+        if self.route.turning or self.route.history or not self._insertions:
+            self.route.undo()
+            return
+        from . import fittings
+        last = self._insertions.pop()
+        geometry.remove(self.obj)
+        geometry.remove(last.fitting)
+        self.obj, self.route = last.preview, last.route
+        fittings.select_object(context, self.obj)
+        self._notice = ''
+
+    def finish(self, context):
+        from . import connections, fittings, port_rings, ports
+        drawn = self.route is not None and self.route.length > 1e-7
+        if not drawn and not self._insertions:
+            self.notice(context, 'empty')
+            return {'RUNNING_MODAL'}
+        if drawn:
+            self.route.release_turn()
+            self.freeze_segment()
+
+        chain = []
+        for insertion in self._insertions:
+            if insertion.drawn:
+                chain.append((insertion.preview, 'START', 'END'))
+            chain.append((insertion.fitting, *insertion.ports))
+        if drawn:
+            chain.append((self.obj, 'START', 'END'))
+        if self._insertions:
+            context.view_layer.update()
+            joints = []
+            for (reference, _, outlet), (moving, inlet, _) in zip(chain, chain[1:]):
+                a = ports.read(context.scene, reference, outlet)
+                b = ports.read(context.scene, moving, inlet)
+                ports.compatible(a, b)
+                if (a.sides != b.sides or (a.position - b.position).length > max(2e-5, a.diameter * 1e-4)
+                        or a.direction.dot(b.direction) > -.9999
+                        or abs(port_rings.phase_offset(a.radial, b.radial, a.direction, a.sides)) > 1e-4
+                        or a.bore and abs(port_rings.phase_offset(
+                            a.inner_radial, b.inner_radial, a.direction, a.sides)) > 1e-4):
+                    raise ports.ConnectionError('continuation_join')
+                joints.append((a, b))
+            links = context.scene.line_pipe_connections.links
+            count = len(links)
+            try:
+                for a, b in joints:
+                    record = connections.new_link(context.scene, b.obj, b.key, a.obj, a.key, 'DIRECT')
+                    record.sides = a.sides
+                group = ports.group_id(chain[0][0])
+                for obj, _, _ in chain:
+                    obj[ports.GROUP] = group
+            except Exception:
+                while len(links) > count:
+                    links.remove(len(links) - 1)
+                raise
+
+        for insertion in self._insertions:
+            if not insertion.drawn:
+                geometry.remove(insertion.preview)
+        if not drawn:
+            geometry.remove(self.obj)
+        self._insertions.clear()
+        self.obj, _, outlet = chain[-1]
+        for obj, _, _ in chain:
+            obj.hide_render = False
+        fittings.select_object(context, self.obj)
+        context.scene.line_pipe_connections.source = self.obj
+        context.scene.line_pipe_connections.source_port = outlet
+        self.cleanup(context, cancel=False)
+        self.report({'INFO'}, i18n.tr('done', context))
+        return {'FINISHED'}
 
     def modal(self, context, event):
         if self._aborted:
@@ -357,6 +557,14 @@ class LP_OT_draw(bpy.types.Operator):
                 self.area.tag_redraw()
                 return {'RUNNING_MODAL'}
             if event.type == 'MIDDLEMOUSE':
+                if event.value == 'PRESS':
+                    self.queue_navigation_feedback(context, event)
+                self._needs_rebase = True
+                return {'PASS_THROUGH'}
+            if event.type in {'LEFT_ALT', 'RIGHT_ALT'} or (
+                    event.type in {'MOUSEMOVE', 'INBETWEEN_MOUSEMOVE'} and event.alt):
+                # Alt+MMB axis gestures need mouse moves to reach Blender's keymap.
+                # Do not latch navigation: native operators can consume MMB release.
                 self._needs_rebase = True
                 return {'PASS_THROUGH'}
             if event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE', 'TRACKPADPAN', 'TRACKPADZOOM', 'NDOF_MOTION'}:
@@ -367,6 +575,8 @@ class LP_OT_draw(bpy.types.Operator):
                 settings.follow_tip = not settings.follow_tip
                 self.sync_view(context)
                 self.area.tag_redraw()
+            elif event.type == 'E' and event.value == 'PRESS' and not event.is_repeat and not event.ctrl:
+                self.insert_fitting(context, event)
             elif self._start_mode == 'QUICK' and self.route is None:
                 if event.type == 'MOUSEMOVE' and self.inside(event):
                     delta = self.mouse(event) - self._start_mouse
@@ -383,25 +593,25 @@ class LP_OT_draw(bpy.types.Operator):
                 self.rebase(event)
                 self.refresh()
             elif event.type in {'RET', 'NUMPAD_ENTER'} and event.value == 'PRESS':
-                if not self.route or self.route.length <= 1e-7:
-                    self.notice(context, 'empty')
+                try:
+                    return self.finish(context)
+                except ValueError as error:
+                    if not self._insertions:
+                        raise
+                    key = str(error)
+                    self.notice(context, key if key in i18n.MESSAGES else 'error', error=key)
                     return {'RUNNING_MODAL'}
-                self.route.release_turn()
-                for key, value in zip(data.DIMENSIONS, (self._diameter, self._radius, self._sides, self._steps)):
-                    setattr(self.obj.line_pipe, key, value)
-                geometry.update(self.obj, self.route.route_points(False), self._diameter, self._radius,
-                                self._sides, self._steps, store=True)
-                self.obj['_line_pipe_dimensions'] = [self._diameter, self._radius, self._sides, self._steps]
-                self.obj.hide_render = False
-                self.cleanup(context, cancel=False)
-                self.report({'INFO'}, i18n.tr('done', context))
-                return {'FINISHED'}
             elif event.type == 'BACK_SPACE' and event.value == 'PRESS' or (
                     event.type == 'Z' and event.ctrl and event.value == 'PRESS'):
                 if self.route:
-                    self.route.undo()
+                    self.undo_segment(context)
                     self.rebase(event)
                     self.refresh()
+            elif self.route and event.type == self._turn_key and event.value == 'PRESS' and not event.is_repeat and not event.ctrl:
+                # The turn key must also recover a pointer that has left the viewport.
+                if self._needs_rebase:
+                    self.rebase(event)
+                self.begin_turn(context, event)
             elif not self.inside(event) and not (self.route and self._follow and
                     event.type == 'MOUSEMOVE' and not self.route.turning):
                 return {'PASS_THROUGH'}
@@ -423,10 +633,6 @@ class LP_OT_draw(bpy.types.Operator):
                     self.start(context, point, direction(settings, normal))
                     self.rebase(event)
                     self.refresh()
-            elif event.type == self._turn_key and event.value == 'PRESS' and not event.is_repeat and not event.ctrl:
-                if self._needs_rebase:
-                    self.rebase(event)
-                self.begin_turn(context, event)
             elif event.type == 'MOUSEMOVE':
                 if self._warp_pending is not None:
                     target = self._warp_pending
@@ -516,9 +722,7 @@ class LP_OT_draw(bpy.types.Operator):
             anchor = self.project(self.route.points[0] if initial else self.route.tip)
             if anchor is None:
                 return
-            left, right = self.viewport_bounds()
-            center = Vector((max(left + 100, min(right - 100, anchor.x)),
-                             max(100, min(self.region.height - 100, anchor.y))))
+            center = self.guide_center(anchor)
             if (center - anchor).length > 1:
                 lines([tuple(anchor), tuple(center)], idle, 1)
             arrows = ({key: value * 80 for key, value in self._initial_directions.items()} if initial else
@@ -548,6 +752,12 @@ class LP_OT_draw(bpy.types.Operator):
             return
         self._cleaned = True
         self._warp_pending = None
+        if self._navigation_timer and bpy.app.timers.is_registered(self._navigation_timer):
+            bpy.app.timers.unregister(self._navigation_timer)
+        self._navigation_timer = None
+        if self._navigation_feedback:
+            self._navigation_feedback.done = True
+            self._navigation_feedback = None
         session = None
         for handle in self._handles:
             bpy.types.SpaceView3D.draw_handler_remove(handle, 'WINDOW')
@@ -561,6 +771,10 @@ class LP_OT_draw(bpy.types.Operator):
         context.workspace.status_text_set(None)
         if cancel:
             geometry.remove(self.obj)
+            for insertion in reversed(self._insertions):
+                geometry.remove(insertion.fitting)
+                geometry.remove(insertion.preview)
+            self._insertions.clear()
             for obj in self._selected:
                 if obj.name in context.view_layer.objects:
                     obj.select_set(True)
@@ -569,6 +783,41 @@ class LP_OT_draw(bpy.types.Operator):
 
     def cancel(self, context):
         self.cleanup(context, cancel=True)
+
+
+class LP_OT_navigation_feedback(bpy.types.Operator):
+    """Observe native navigation without consuming its events or changing its keymap."""
+    bl_idname = 'line_pipe.navigation_feedback'
+    bl_label = 'Pipe Navigation Feedback'
+    bl_options = {'INTERNAL'}
+
+    def invoke(self, context, event):
+        self.owner = session
+        if not self.owner or not self.owner.native_navigation_active():
+            return {'CANCELLED'}
+        self.done = False
+        self.owner._navigation_feedback = self
+        context.window_manager.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
+
+    def modal(self, context, event):
+        owner = self.owner
+        if (self.done or session is not owner or owner._cleaned or
+                not owner.native_navigation_active() or
+                event.type in {'ESC', 'RIGHTMOUSE', 'WINDOW_DEACTIVATE'} or
+                event.type == 'MIDDLEMOUSE' and event.value == 'RELEASE'):
+            if owner._navigation_feedback is self:
+                owner._navigation_feedback = None
+                owner._needs_rebase = True
+            return {'FINISHED', 'PASS_THROUGH'}
+        if event.type == 'MOUSEMOVE':
+            try:
+                owner.navigation_feedback(event)
+            except Exception as error:
+                owner.cleanup(context, cancel=True)
+                owner.report({'ERROR'}, owner.message(context, error))
+                return {'FINISHED', 'PASS_THROUGH'}
+        return {'PASS_THROUGH'}
 
 
 class LP_OT_mesh(bpy.types.Operator):
@@ -590,6 +839,7 @@ class LP_OT_mesh(bpy.types.Operator):
         # Native conversion preserves evaluated solid geometry and object transforms.
         with context.temp_override(selected_objects=[obj], selected_editable_objects=[obj]):
             bpy.ops.object.convert(target='MESH')
+            geometry.remember_mesh(context.active_object)
         context.object.line_pipe.enabled = False
         return {'FINISHED'}
 
@@ -601,4 +851,4 @@ def abort(_=None):
         operation.cleanup(bpy.context, cancel=True)
 
 
-CLASSES = (LP_OT_language, LP_OT_reset_guide_colors, LP_OT_draw, LP_OT_mesh)
+CLASSES = (LP_OT_language, LP_OT_reset_guide_colors, LP_OT_draw, LP_OT_navigation_feedback, LP_OT_mesh)

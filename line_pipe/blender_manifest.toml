@@ -1,8 +1,8 @@
 schema_version = "1.0.0"
 id = "line_pipe"
-version = "0.2.0"
+version = "0.5.0"
 name = "PipeWorks"
-tagline = "Draw solid procedural pipes with hold-to-turn routing"
+tagline = "Draw pipes, mark ports, connect fittings and build a library"
 maintainer = "O_Pisces"
 type = "add-on"
 tags = ["3D View", "Add Mesh", "Modeling"]

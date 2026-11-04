@@ -50,6 +50,22 @@ checks = []
 events = []
 last_command = None
 current_mouse = (400, 400)
+original_modal = operators.LP_OT_draw.modal
+
+
+def simulated_modal(self, context, event):
+    global current_mouse
+    result = original_modal(self, context, event)
+    if (event.type == self._turn_key and event.value == 'PRESS' and self.route
+            and self.route.turning and self._warp_pending is not None):
+        target = self._warp_pending
+        current_mouse = (int(region.x + target.x), int(region.y + target.y))
+        # Native simulation suppresses OS cursor-warp events; feed the destination back.
+        window.event_simulate(type='MOUSEMOVE', value='NOTHING', x=current_mouse[0], y=current_mouse[1])
+    return result
+
+
+operators.LP_OT_draw.modal = simulated_modal
 
 
 def override():

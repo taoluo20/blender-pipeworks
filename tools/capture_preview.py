@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Capture the actual PipeWorks panel and modal guides in a disposable wide viewport."""
 import json
+from mathutils import Euler
 import os
 from pathlib import Path
 import runpy
@@ -132,6 +133,39 @@ def bend_move():
     event('MOUSEMOVE', point=target + Vector((operation.region.x, operation.region.y)))
 
 
+def prepare_connections():
+    runpy.run_path(str(ROOT / 'tools' / 'build_connection_example.py'), run_name='__main__')
+
+
+def prepare_library():
+    # Only the disposable self-authored scene created by this script is replaced.
+    for obj in tuple(bpy.context.scene.objects):
+        bpy.data.objects.remove(obj, do_unlink=True)
+    settings = bpy.context.scene.line_pipe_settings
+    settings.tool_mode = 'LIBRARY'
+    settings.diameter = .4
+    settings.hollow = True
+    settings.wall = .035
+    settings.free_sides = False
+    settings.template_length = 1.2
+    family = ''
+    for sides, x in ((24, -1.1), (60, 1.1)):
+        settings.radial_segments = sides
+        obj = line_pipe.fittings.create_fitting(bpy.context, 'ELBOW')
+        obj.name = 'Hollow Elbow ' + str(sides)
+        obj.location.x = x
+        obj.rotation_euler.x = -.65
+        bpy.context.view_layer.update()
+        identifier = line_pipe.fittings.add_to_library(bpy.context, obj, family)
+        family = family or identifier
+    settings.continuation_fitting = family
+    view = area_context()['area'].spaces.active.region_3d
+    view.view_rotation = Euler((1.35, 0, .3)).to_quaternion()
+    view.view_location = (.5, .3, .6)
+    view.view_distance = 6
+    view.view_perspective = 'PERSP'
+
+
 def finish():
     (OUT / 'capture-result.json').write_text(json.dumps({
         'product': 'PipeWorks', 'screenshots': captures, 'perspective': True,
@@ -168,6 +202,10 @@ actions.extend([
     lambda: event('B', 'RELEASE'), lambda: event('ESC', 'PRESS'),
     restore_examples,
     lambda: bpy.ops.wm.save_as_mainfile(filepath=str(ROOT / 'examples' / 'pipeworks-example.blend')),
+    prepare_connections, lambda: capture('pipeworks-connections.png'),
+    prepare_library, lambda: capture('pipeworks-library-en.png'),
+    lambda: bpy.ops.line_pipe.language(), lambda: capture('pipeworks-library-zh.png'),
+    lambda: bpy.ops.line_pipe.language(),
     finish,
 ])
 bpy.app.timers.register(tick, first_interval=2)

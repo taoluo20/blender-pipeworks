@@ -13,7 +13,8 @@ from bpy_extras import view3d_utils
 
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE = '--baseline' in sys.argv
-OUT = ROOT / 'verification' / ('interaction-baseline' if BASELINE else 'interaction-ui')
+OUT = ROOT / 'verification' / ('interaction-baseline' if BASELINE else
+                              'navigation-ui' if '--navigation-only' in sys.argv else 'interaction-ui')
 OUT.mkdir(parents=True, exist_ok=True)
 for key in ('BLENDER_USER_CONFIG', 'BLENDER_USER_SCRIPTS', 'BLENDER_USER_EXTENSIONS'):
     assert Path(os.environ[key]).is_relative_to(OUT) and Path(os.environ[key]).is_dir()
@@ -39,13 +40,32 @@ def traced_modal(self, context, event):
         pointer[:] = [event.mouse_x, event.mouse_y]
     if event.type != 'TIMER':
         trace.append((event.type, event.value))
-    return original_modal(self, context, event)
+    result = original_modal(self, context, event)
+    if (event.type == self._turn_key and event.value == 'PRESS' and self.route
+            and self.route.turning and self._warp_pending is not None):
+        target = self._warp_pending
+        anchor = self.project(self.route.tip)
+        left, right = self.viewport_bounds()
+        expected = Vector((round(max(left + 100, min(right - 100, anchor.x))),
+                           round(max(100, min(self.region.height - 100, anchor.y)))))
+        check('turn press targets current tip guide center', (target - expected).length < .01)
+        check('turn press does not choose a bend', self.route.candidate is None)
+        measurements['turn_length'] = self.route.length
+        # Native simulation suppresses the OS mouse move from cursor_warp.
+        window.event_simulate(type='MOUSEMOVE', value='NOTHING',
+                              x=int(region.x + target.x), y=int(region.y + target.y))
+    elif event.type == 'MOUSEMOVE' and self.route and self.route.turning and self.route.candidate is None:
+        if 'turn_length' in measurements:
+            check('turn cursor move preserves pipe length', abs(self.route.length - measurements['turn_length']) < 1e-6)
+    return result
 
 
 def traced_cleanup(self, context, cancel):
     original_cleanup(self, context, cancel)
     cleanup_receipts.append(dict(cleaned=self._cleaned, handlers=len(self._handles),
-                                 timer=hasattr(self, '_timer'), warp=self._warp_pending is not None))
+                                 timer=hasattr(self, '_timer'), warp=self._warp_pending is not None,
+                                 navigation_timer=self._navigation_timer is not None,
+                                 navigation_feedback=self._navigation_feedback is not None))
 
 
 operators.LP_OT_draw.modal = traced_modal
@@ -165,9 +185,9 @@ def extend(pixels=80):
     move(projected.x * pixels, projected.y * pixels)
 
 
-def begin():
+def begin(direction='X'):
     settings = bpy.context.scene.line_pipe_settings
-    settings.start_mode, settings.direction = 'COORDINATES', 'X'
+    settings.start_mode, settings.direction = 'COORDINATES', direction
     settings.diameter, settings.bend_radius = .2, .4
     if not BASELINE:
         settings.follow_tip = False
@@ -220,6 +240,12 @@ def choose_bend(heading):
     event('MOUSEMOVE', x=region.x + s._turn_mouse.x + dx, y=region.y + s._turn_mouse.y + dy)
 
 
+def tap_turn():
+    # Queue release ahead of the OS warp destination, as a fast hardware tap can do.
+    event('B', 'PRESS')
+    event('B', 'RELEASE')
+
+
 def quick():
     event('P', 'PRESS', ctrl=True)
 
@@ -260,7 +286,38 @@ def settle_wrap():
         event('MOUSEMOVE', x=region.x + target.x, y=region.y + target.y)
 
 
-def navigation(kind, count=1):
+def remember_navigation():
+    s = operators.session
+    check('native drag attaches feedback observer', s._navigation_feedback is not None)
+    measurements['nav_length'] = s.route.length
+    measurements['nav_heading'] = list(s.route.heading)
+    measurements['nav_scale'] = list(s._extension_scale)
+
+
+def check_navigation(label, dx, dy):
+    s = operators.session
+    normal_delta = Vector((dx, dy)).dot(Vector(measurements['nav_scale']))
+    expected = max(s.route.minimum, measurements['nav_length'] + normal_delta * .5)
+    check(label + ' gives exactly half-speed length feedback', abs(s.route.length - expected) < 1e-6)
+    check(label + ' preserves chosen heading', list(s.route.heading) == measurements['nav_heading'])
+    check(label + ' releases feedback observer', s._navigation_feedback is None and s._navigation_timer is None)
+    measurements.setdefault('navigation_feedback', []).append(dict(label=label, before=measurements['nav_length'],
+        after=s.route.length, full_speed_delta=normal_delta, follow=s._follow))
+
+
+def remember_resume():
+    measurements['resume_mouse'] = pointer.copy()
+    measurements['resume_length'] = operators.session.route.length
+    measurements['resume_scale'] = list(operators.session._extension_scale)
+
+
+def check_resume(label):
+    delta = Vector(pointer) - Vector(measurements['resume_mouse'])
+    expected = measurements['resume_length'] + delta.dot(Vector(measurements['resume_scale']))
+    check(label + ' restores normal drawing speed', abs(operators.session.route.length - expected) < 1e-6)
+
+
+def navigation(kind, count=1, reverse=False):
     for index in range(count):
         label = kind + ' ' + str(index + 1)
         events.append(remember)
@@ -269,19 +326,37 @@ def navigation(kind, count=1):
                                         y=region.y + region.height * .4))
         else:
             shift = kind == 'pan'
+            alt = kind == 'axis'
+            ctrl = kind == 'drag_zoom'
+            dx, dy = (70, 0) if alt else (-45, -30) if reverse else (45, 30)
+            if alt:
+                events.append(lambda: event('LEFT_ALT', 'PRESS', alt=True))
+            events.append(
+                lambda shift=shift, alt=alt, ctrl=ctrl: event('MIDDLEMOUSE', 'PRESS', x=region.x + region.width * .4,
+                                                 y=region.y + region.height * .4, shift=shift, alt=alt, ctrl=ctrl))
+            if not alt:
+                events.append(remember_navigation)
             events.extend([
-                lambda shift=shift: event('MIDDLEMOUSE', 'PRESS', x=region.x + region.width * .4,
-                                          y=region.y + region.height * .4, shift=shift),
-                lambda shift=shift: event('MOUSEMOVE', x=pointer[0] + 45, y=pointer[1] + 30, shift=shift),
-                lambda shift=shift: event('MIDDLEMOUSE', 'RELEASE', shift=shift),
+                lambda shift=shift, alt=alt, ctrl=ctrl, dx=dx, dy=dy: event('MOUSEMOVE', x=pointer[0] + dx,
+                                                 y=pointer[1] + dy,
+                                                 shift=shift, alt=alt, ctrl=ctrl),
+                lambda shift=shift, alt=alt, ctrl=ctrl: event('MIDDLEMOUSE', 'RELEASE', shift=shift, alt=alt, ctrl=ctrl),
             ])
+            if alt:
+                events.append(lambda: event('LEFT_ALT', 'RELEASE'))
         events.extend([
             lambda label=label: check(label + ' changes native view', operators.session.view_state() != measurements['view']),
+        ])
+        if kind in {'orbit', 'pan', 'drag_zoom'}:
+            events.append(lambda label=label, dx=dx, dy=dy: check_navigation(label, dx, dy))
+        events.extend([
+            lambda: measurements.update(length=operators.session.route.length),
             lambda: extend(12),
             lambda label=label: check(label + ' rebases without changing length',
                                      abs(operators.session.route.length - measurements['length']) < 1e-6),
-            lambda: extend(55),
+            remember_resume, lambda: extend(55),
             lambda label=label: resumed(label),
+            lambda label=label: check_resume(label),
         ])
 
 
@@ -382,8 +457,10 @@ def interaction_suite():
         begin, center_mouse, lambda: extend(130),
     ])
     navigation('orbit', 2)
+    navigation('orbit', reverse=True)
     navigation('pan', 2)
     navigation('zoom', 2)
+    navigation('axis', 2)
     events.extend([
         lambda: event('B', 'PRESS'),
         lambda: move(0, 70),
@@ -392,7 +469,7 @@ def interaction_suite():
         lambda: capture('bend-guides-english'),
         lambda: check('bend guides draw white idle and warm yellow active arrows', has_color(operators.GUIDE_IDLE)
                       and has_color(operators.GUIDE_ACTIVE)),
-        lambda: check_anchor('manual bend guides remain at tip after navigation', displaced=True),
+        lambda: check_anchor('manual bend guides remain at tip after navigation'),
         custom_colors, clear_guides,
         lambda: capture('bend-guides-custom-alpha'),
         lambda: check_custom_colors('live bend customization', world=True),
@@ -438,6 +515,7 @@ def interaction_suite():
     ])
     navigation('pan')
     navigation('zoom')
+    navigation('axis')
     for index in range(3):
         events.extend([
             remember,
@@ -475,6 +553,44 @@ def interaction_suite():
         lambda: check('view change clears stale bend choice', len(operators.session.route.points) == 1),
         lambda: event('WINDOW_DEACTIVATE'),
         lambda: check('focus loss removes active preview and session', operators.session is None),
+        lambda: setattr(bpy.context.scene.line_pipe_settings, 'follow_tip', False),
+        lambda: setattr(bpy.context.scene.line_pipe_settings, 'show_guides', False),
+        begin, center_mouse, lambda: extend(100), remember,
+        lambda: event('MOUSEMOVE', x=region.x + region.width + 100, y=region.y + region.height * .5),
+        lambda: check('outside pointer does not extend manual route',
+                      abs(operators.session.route.length - measurements['length']) < 1e-6),
+        lambda: event('B', 'PRESS'),
+        lambda: check('B recovers outside pointer even with guides hidden', operators.session.route.turning
+                      and operators.session.inside(type('Pointer', (), dict(mouse_x=pointer[0], mouse_y=pointer[1]))())),
+        lambda: event('B', 'RELEASE'),
+        lambda: check('B tap returns pointer without adding a bend or changing length',
+                      len(operators.session.route.points) == 1 and
+                      abs(operators.session.route.length - measurements['length']) < 1e-6),
+        lambda: event('MOUSEMOVE', x=region.x + region.width + 100, y=region.y + region.height * .5),
+        tap_turn,
+        lambda: check('fast B tap tolerates release before the warp move', not operators.session.route.turning
+                      and len(operators.session.route.points) == 1
+                      and abs(operators.session.route.length - measurements['length']) < 1e-6),
+        lambda: extend(55), lambda: resumed('returned pointer'),
+        lambda: event('B', 'PRESS'),
+        lambda: choose_bend((0, 0, 1)),
+        lambda: measurements.update(turn_anchor=list(operators.session._turn_mouse),
+                                    turn_candidate=list(operators.session.route.candidate)),
+        lambda: event('B', 'PRESS'),
+        lambda: check('held key does not repeatedly recenter or clear chosen bend',
+                      list(operators.session._turn_mouse) == measurements['turn_anchor'] and
+                      list(operators.session.route.candidate) == measurements['turn_candidate']),
+        lambda: event('B', 'RELEASE'),
+        lambda: extend(75), remember,
+        lambda: event('B', 'PRESS'),
+        lambda: check('next bend uses the new pipe tip',
+                      (operators.session._turn_mouse - Vector(measurements['turn_anchor'])).length > 5),
+        lambda: event('B', 'RELEASE'),
+        lambda: check('repeated returns preserve committed bend and pipe length',
+                      len(operators.session.route.points) == 2 and
+                      abs(operators.session.route.length - measurements['length']) < 1e-6),
+        lambda: event('ESC', 'PRESS'),
+        lambda: setattr(bpy.context.scene.line_pipe_settings, 'show_guides', True),
     ])
     if '--cleanup-only' in sys.argv:
         events.clear()
@@ -487,7 +603,8 @@ def interaction_suite():
         lambda: check('disable removes modal session and preview', operators.session is None
                       and sum(o.type == 'CURVE' for o in bpy.context.scene.objects) == (0 if '--cleanup-only' in sys.argv else 1)),
         lambda: check('disable removes draw handlers and timer', cleanup_receipts[-1] ==
-                      dict(cleaned=True, handlers=0, timer=False, warp=False)),
+                      dict(cleaned=True, handlers=0, timer=False, warp=False,
+                           navigation_timer=False, navigation_feedback=False)),
         lambda: check('disable removes settings and keymap', not hasattr(bpy.types.Scene, 'line_pipe_settings')
                       and not line_pipe._keymaps),
     ])
@@ -569,4 +686,37 @@ def tick():
 
 
 baseline_suite() if BASELINE else interaction_suite()
+if '--navigation-only' in sys.argv:
+    events.clear()
+    events.extend([begin, center_mouse, lambda: extend(150)])
+    navigation('orbit', 2)
+    navigation('orbit', reverse=True)
+    navigation('pan')
+    navigation('pan', reverse=True)
+    navigation('drag_zoom')
+    navigation('drag_zoom', reverse=True)
+    navigation('axis')
+    events.extend([lambda: setattr(bpy.context.scene.line_pipe_settings, 'follow_tip', True),
+                   lambda: extend(10), lambda: extend(70)])
+    navigation('orbit')
+    navigation('pan', reverse=True)
+    events.extend([
+        lambda: event('ESC', 'PRESS'),
+        lambda: check('navigation cancellation removes session', operators.session is None),
+        lambda: begin('AUTO'), center_mouse, lambda: aim_initial('+X'),
+        lambda: event('MIDDLEMOUSE', 'PRESS'), remember_navigation,
+        lambda: move(45, 30), lambda: event('MIDDLEMOUSE', 'RELEASE'),
+        lambda: check_navigation('automatic first axis', 45, 30),
+        lambda: event('ESC', 'PRESS'),
+        begin, center_mouse, lambda: extend(120),
+        lambda: event('MIDDLEMOUSE', 'PRESS'), remember_navigation,
+        lambda: move(25, 15), line_pipe.unregister,
+        lambda: event('MIDDLEMOUSE', 'RELEASE'),
+        lambda: check('disable during native drag removes feedback timers and operators', operators.session is None
+                      and not cleanup_receipts[-1]['navigation_timer']
+                      and not cleanup_receipts[-1]['navigation_feedback']
+                      and not any(op and op.bl_idname in {'LINE_PIPE_OT_navigation_feedback', 'LINE_PIPE_OT_draw'}
+                                  for op in window.modal_operators)),
+        finish,
+    ])
 bpy.app.timers.register(tick, first_interval=3)

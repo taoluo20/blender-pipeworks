@@ -33,7 +33,11 @@ bpy.ops.mesh.primitive_cube_add(size=2, location=(-3, 0, 0))
 bpy.context.object.name = 'Disposable Start Surface'
 warp_count = 0
 input_events = []
+turn_returns = []
+turn_moves = []
 original_wrap = addon.operators.LP_OT_draw.wrap_pointer
+original_turn = addon.operators.LP_OT_draw.begin_turn
+original_modal = addon.operators.LP_OT_draw.modal
 
 
 def wrapped(self, event):
@@ -44,6 +48,30 @@ def wrapped(self, event):
 
 
 addon.operators.LP_OT_draw.wrap_pointer = wrapped
+
+
+def returned(self, context, event):
+    length = self.route.length
+    original_turn(self, context, event)
+    if self.route.turning and self._warp_pending is not None:
+        turn_returns.append(dict(pointer=list(self.mouse(event)), target=list(self._warp_pending),
+                                 tip=list(self.route.tip), before=length, after=self.route.length))
+
+
+def traced_modal(self, context, event):
+    pending = self._warp_pending.copy() if self._warp_pending is not None else None
+    was_turning = self.route is not None and self.route.turning
+    result = original_modal(self, context, event)
+    if event.type == 'MOUSEMOVE' and pending is not None:
+        turn_moves.append(dict(pointer=list(self.mouse(event)), target=list(pending),
+                               error=(self.mouse(event) - pending).length,
+                               turning=was_turning, length=self.route.length,
+                               candidate=self.route.candidate is not None))
+    return result
+
+
+addon.operators.LP_OT_draw.begin_turn = returned
+addon.operators.LP_OT_draw.modal = traced_modal
 
 
 class PW_OT_input_monitor(bpy.types.Operator):
@@ -74,6 +102,7 @@ def tick():
                  keymaps=[dict(type=item.type, shift=item.shift, ctrl=item.ctrl, active=item.active)
                           for _, item in addon._keymaps],
                  input_events=input_events[-30:],
+                 turn_returns=turn_returns, turn_moves=turn_moves,
                  mode=session._start_mode if session else None, length=route.length if route else None,
                  points=[list(p) for p in route.points] if route else [],
                  tip=list(route.tip) if route else None, turning=route.turning if route else False,

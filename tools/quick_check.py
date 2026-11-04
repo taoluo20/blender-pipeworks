@@ -8,7 +8,8 @@ import zipfile
 from build import build, ROOT, SOURCE
 
 EXPECTED = {'__init__.py', 'blender_manifest.toml', 'LICENSE', 'data.py', 'geometry.py',
-            'i18n.py', 'model.py', 'operators.py', 'ui.py'}
+            'i18n.py', 'model.py', 'operators.py', 'ui.py', 'ports.py', 'connections.py',
+            'connection_geometry.py', 'connection_ops.py', 'connection_ui.py', 'port_rings.py', 'fittings.py'}
 manifest = tomllib.loads((SOURCE / 'blender_manifest.toml').read_text(encoding='utf8'))
 assert manifest['name'] == 'PipeWorks' and manifest['id'] == 'line_pipe'
 assert manifest['license'] == ['SPDX:GPL-3.0-or-later']

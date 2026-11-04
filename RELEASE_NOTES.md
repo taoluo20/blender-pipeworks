@@ -1,67 +1,62 @@
-# PipeWorks 0.2.0
+# PipeWorks 0.5.0
 
-Draw solid procedural pipes in Blender with mouse-driven six-axis starts and
-hold-to-turn rounded bends. This release updates drawing interaction and arrow colors.
+Draw pipes, connect their mouths, and continue through library fittings in Blender
+5.2+. This release includes local 0.2.1–0.5.0 work since public release 0.2.0.
 
-- Press Ctrl+P, move left for world origin, or move right and click a surface.
-  It takes priority over Parent in Object Mode; disabling restores native parenting.
-- White normal arrows and warm yellow selected arrows retain signed axis labels.
-  Native color swatches support independent RGBA/Hex editing, global preferences
-  and one-click default restoration; guides stay anchored to the start or tip.
-- Radius Limit is a maximum: short segments fit smaller circular fillets with a
-  positive inner radius, shown in the overlay. Short-tail sweep tangents are exact.
-- Orbit, pan and zoom during drawing, then continue with a freshly rebased input.
-- Toggle Follow Tip with Ctrl+F for view translation and continuous edge wrapping.
-- Toggle Show Guides for axis/bend labels, current straight length and bend angle.
-- Move to choose +X/-X/+Y/-Y/+Z/-Z before the first bend.
-- Hold B, move, release to turn; Enter finishes the pipe.
-- Set diameter and radius limit in the PipeWorks sidebar; keep an editable
-  centerline or convert the result to a solid mesh.
-- English by default, with a one-button Simplified Chinese switch.
+- **Drawing:** Alt+MMB works while drawing; B returns the pointer to the current
+  bend start. Orbit, pan and drag zoom give 50% length feedback.
+- **Connections:** pick the reference first, then the moving mouth. Dock the whole
+  group with roll preview, or keep both ends fixed and generate a smooth/angular
+  bridge. Match curvature between independently rotated orthogonal groups.
+- **Profiles:** default 60 edges, ten draggable presets, custom counts, hollow
+  walls, manual/automatic port marking, and copied-mesh repair.
+- **Library variants:** share single fitting .blend files. Use **Add Selected as
+  Variant** to group separately authored edge counts. Library mouths require
+  matching actual counts and retain their authored rings.
+- **E continuation:** select **E Fitting**, extend a pipe and press E. Built-in
+  cylinder/elbow templates generate the current profile. Library families choose
+  the exact count; missing sizes report available counts and preserve the drawing.
+  Procedural variants adapt diameter and bore. Plain two-port meshes scale
+  uniformly when both mouth profiles match.
+- **Editing:** procedural library fittings keep editable lengths and profiles.
+  Backspace retracts the latest bend/fitting. Enter saves the connected pieces
+  as a group with one-step Undo/Redo. Escape cancels the drawing.
+- **AI fitting prompt:** **Library > Copy AI Fitting Prompt** copies a complete
+  specification. Replace its design-description block before giving it to an AI.
+  It defines variants, circular mouth topology, hollow rims, editable generation
+  parameters and port-marking steps. The button copies text locally.
+- English is the default; the Chinese button switches the complete interface.
 
-Requires Blender 5.2+. Tested on Windows / Blender 5.2.2 LTS. See the repository's
-validation notes for the checks and practical limits. Automatic linking, pipe
-assemblies, snapping, and fittings are not part of this release.
+Install the attached `pipeworks-0.5.0.zip` through Blender's **Install from Disk**.
+Update the existing `line_pipe` extension rather than enabling a second copy.
+`SHA256SUMS.txt` verifies the installer. See the repository validation document
+for Blender integration and installed-ZIP native viewport results.
 
-Install `pipeworks-0.2.0.zip` through Preferences > Get Extensions > Install from
-Disk. The internal extension ID remains `line_pipe`; upgrade an existing local
-Line Pipe installation rather than enabling two copies. Verify the download with
-`SHA256SUMS.txt`. License: GPL-3.0-or-later.
-
-Validation passed: 179 integration assertions, 326 compact-bend assertions,
-102 installed-extension interaction assertions and 41 drawing regressions.
-Actual ZIP installation, preference restart, native color-picker input, extension
-validation and reproducible packaging also passed. Blender tests run locally;
-GitHub CI checks portable source and package integrity.
+Connections retain separate editable objects and link records; they do not weld
+meshes or perform full-scene obstacle avoidance. The library uses local files.
 
 ---
 
 ## 简体中文
 
-**PipeWorks 0.2.0** 可在 Blender 中用鼠标选择六轴起始方向、延长实心管道，
-并通过按住/松开按键完成圆滑转弯。本版更新画管交互及箭头颜色设置。
+在 Blender 5.2+ 中画管、连接管口，并通过库件接续绘制。本次汇总上次公开版 0.2.0
+之后的本地 0.2.1–0.5.0 更新。
 
-- 按 Ctrl+P 后左摆从世界原点起画，右摆后点击表面起画；Object Mode 中优先于
-  Parent，禁用插件后恢复原生行为。
-- 普通箭头默认白色，选中默认暖黄，保留带正负号的轴标签。原生颜色控件支持
-  分别调整 RGBA/Hex、全局保存和一键恢复默认，提示固定于起点或管端。
-- 弯曲半径上限内适配更小圆弧，内侧半径保持大于零，并显示实际局部半径；
-  精确扫掠切向消除极短直线连接处穿插。
-- 绘制中旋转、平移、缩放后，重建输入基准并继续画管。
-- Ctrl+F 切换跟随管头，视图平移并支持边缘连续续移。
-- 显示辅助提示开关控制轴向/弯头标签、当前直线段长度与角度。
-- 首弯之前移动鼠标选择 +X/-X/+Y/-Y/+Z/-Z。
-- 按住 B 并移动预览，松开确认转弯，Enter 完成。
-- 在 PipeWorks 侧栏设定直径和半径上限，保留可编辑中心线或转为实心网格。
-- 默认英文，一键切换简体中文。
+- **绘制：**修复画管时的 Alt+中键；B 回到当前转弯起点。旋转、平移和拖动缩放时提供 50% 管长反馈。
+- **连接：**先选基准口，再选移动口；支持整组吸附与滚转预览，或固定两端生成平滑/折角补管。
+  可在分别旋转的正交管道组之间统一曲率。
+- **截面：**默认 60 边、十种可拖动预设与自由边数；真实空管内壁、手动/自动标口和副本网格修复。
+- **库件版本：**单件 .blend 文件导入导出；用「添加所选为边数版本」把独立制作的规格归为一组。
+  库件连接要求实际边数一致，保留作者的管口边环。
+- **E 接续：**选择 E 接续管件，延长管道后按 E。内置圆柱/弯头按当前截面生成；库按同边数选择版本，
+  缺规格时提示可用边数并保留绘制。程序化版本适配直径与内孔；普通双口网格等比缩放后截面匹配也能接续。
+- **编辑：**程序化库件可改长度和截面。Backspace 撤回最新弯头或管件；Enter 保存各件、连接和分组，
+  整次绘制支持一步撤销重做；Esc 取消。
+- **AI 管件提示词：**在「管件库」点「复制 AI 管件提示词」，替换中间的设计描述后交给 AI。
+  模板说明边数版本、圆口拓扑、空管端面、可调生成参数与标口流程。按钮在本地复制文本。
+- 默认英文，一键切换完整简体中文。
 
-需要 Blender 5.2+，已在 Windows / Blender 5.2.2 LTS 验证。检查范围和实际边界
-见仓库验证说明。本版不包含自动连接、组装、吸附或管件库。
+在 Blender「从磁盘安装」中选择附件 `pipeworks-0.5.0.zip`，更新既有 `line_pipe` 扩展。
+可用 `SHA256SUMS.txt` 校验安装包。Blender 集成与真实安装包的原生界面检查结果见仓库验证文档。
 
-通过「偏好设置 > 获取扩展 > 从磁盘安装」选择 `pipeworks-0.2.0.zip`。内部扩展
-ID 保留 `line_pipe`，已有本地 Line Pipe 安装请直接升级，避免同时启用两份。
-`SHA256SUMS.txt` 用于校验下载。许可为 GPL-3.0-or-later。
-
-验证通过：179 项集成、326 项紧凑弯头、102 项真实安装交互及 41 项绘制回归。
-真实 ZIP 安装、偏好重启、原生拾色器输入、扩展校验与可复现打包均通过。
-Blender 检查在本地运行，GitHub CI 检查便携源码和安装包完整性。
+连接保留独立可编辑物体及记录，不做网格焊接或全场景避障。管件库使用本地文件。

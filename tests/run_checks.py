@@ -19,6 +19,9 @@ out.mkdir(parents=True, exist_ok=True)
 jobs = [
     ('integration', ['--factory-startup', '--python', 'tests/check_line_pipe.py'], out / 'backend-user'),
     ('compact', ['--factory-startup', '--python', 'tests/check_compact_bends.py'], out / 'compact-user'),
+    ('connections', ['--factory-startup', '--python', 'tests/check_connections.py'], out / 'connections-user'),
+    ('profiles', ['--factory-startup', '--python', 'tests/check_profiles.py'], out / 'profiles-user'),
+    ('connection-restart', ['--factory-startup', '--python', 'tests/check_connection_restart.py'], out / 'connection-restart-user'),
     ('installed', ['--factory-startup', '--python', 'tests/check_installed_line_pipe.py'], out / 'install-user'),
     ('restart', ['--python', 'tests/check_installed_line_pipe.py', '--', '--reload-preferences'], out / 'install-user'),
 ]
