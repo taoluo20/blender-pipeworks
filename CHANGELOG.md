@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.1 - 2026-11-05
 
 - Pass Alt+left/middle/right mouse navigation through to Blender during drawing,
   start selection, bends and port picking. Alt+right mouse no longer cancels the tool.
@@ -101,7 +101,7 @@ The internal `line_pipe` ID remains compatible with the local drawing prototype.
 
 ## 简体中文
 
-### 未发布
+### 0.5.1 - 2026-11-05
 
 - 绘制、起点选择、转弯和管口拾取时，Alt+左/中/右键均交给 Blender 原生导航；
   Alt+右键不再误触发取消。

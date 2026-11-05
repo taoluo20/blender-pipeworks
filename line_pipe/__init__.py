@@ -6,7 +6,7 @@ from bpy.props import PointerProperty
 from . import data, operators, ui, connection_ops, connection_ui, fittings
 
 bl_info = {
-    'name': 'PipeWorks', 'author': 'O_Pisces', 'version': (0, 5, 0),
+    'name': 'PipeWorks', 'author': 'O_Pisces', 'version': (0, 5, 1),
     'blender': (5, 2, 0), 'location': 'View3D > Sidebar > PipeWorks',
     'description': 'Draw pipes, connect ports and match group bend radii', 'category': 'Add Curve',
 }

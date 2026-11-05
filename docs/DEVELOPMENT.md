@@ -11,7 +11,7 @@ python tests/run_gui_checks.py --blender /path/to/blender
 ```
 
 On Windows, pass the full path to `blender.exe` as a quoted argument. The build
-produces `dist/pipeworks-0.5.0.zip` and `dist/SHA256SUMS.txt`. ZIP timestamps,
+produces `dist/pipeworks-0.5.1.zip` and `dist/SHA256SUMS.txt`. ZIP timestamps,
 permissions, order, and compression are fixed; repeated builds with the same
 Python/zlib toolchain compare byte for byte. Compression bytes can differ between
 toolchain versions. Release 0.2.0 uses Blender's bundled Python 3.13.13.
@@ -104,7 +104,7 @@ ignored. Only this repository's 16-file `line_pipe/` extension is packaged.
 无需 pip 依赖。上方命令运行便携检查、可选 Blender 清单验证、完整集成及原生交互。
 Windows 中以引号包裹 `blender.exe` 的完整路径。
 
-构建输出 `dist/pipeworks-0.5.0.zip` 和 `SHA256SUMS.txt`。ZIP 的时间戳、权限、
+构建输出 `dist/pipeworks-0.5.1.zip` 和 `SHA256SUMS.txt`。ZIP 的时间戳、权限、
 文件顺序和压缩固定，相同 Python/zlib 工具链下重复构建逐字节相同；不同工具链
 版本的压缩字节可能不同。0.2.0 发布包使用 Blender 自带 Python 3.13.13。
 CI 检查语法、产品元数据、独立范围、

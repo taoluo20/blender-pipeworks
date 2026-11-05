@@ -1,5 +1,15 @@
 # Validation
 
+## 0.5.1 - 2026-11-05
+
+- 126 native Alt navigation assertions cover custom Blender bindings and Industry
+  Compatible, all three mouse buttons, Follow Tip, both modifier-release orders,
+  bends, waiting for a start, port picking and unmodified right-mouse cancellation.
+- The same interaction fix passed 185 drawing, 83 existing navigation and 35
+  connection assertions; the actual local install passed another 126 Alt assertions.
+- The release ZIP is checked for exact source contents, reproducible bytes and
+  Blender manifest validity, with a fresh isolated installed-ZIP Alt navigation run.
+
 ## 0.5.0 - 2026-11-04
 
 Windows / Blender 5.2.2 LTS passed 179 integration, 326 compact-bend and 206
@@ -218,6 +228,13 @@ unfreed-memory diagnostics; assertions and process exit codes are recorded.
 ---
 
 ## 简体中文
+
+### 0.5.1 - 2026-11-05
+
+- 126 项原生 Alt 导航覆盖 Blender 自定义键位与 Industry Compatible、三个鼠标键、
+  跟随管头、不同松键顺序、转弯、等待起点、管口拾取及单独右键取消。
+- 同一修复另通过 185 项绘制、83 项既有导航和 35 项连接检查；本机安装目录另通过 126 项 Alt 检查。
+- 发布包核对源码逐字节一致、可复现构建与 Blender 清单，并在隔离配置中重新安装 ZIP 验证 Alt 导航。
 
 ### 0.5.0 - 2026-11-04
 

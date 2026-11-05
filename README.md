@@ -5,6 +5,7 @@ point, extend with the mouse, hold a key to turn, and press Enter to finish.
 
 **English** · [简体中文](#简体中文)
 
+**0.5.1** fixes Alt+left/middle/right mouse navigation during drawing and port picking.
 **0.5.0** adds **E** fitting continuation, edge-count variants in the library,
 editable procedural fitting lengths, and a copyable AI fitting specification.
 
@@ -15,7 +16,7 @@ editable procedural fitting lengths, and a copyable AI fitting specification.
 
 ## Install
 
-1. Use the supplied `pipeworks-0.5.0.zip`, or build it from this source.
+1. Use the supplied `pipeworks-0.5.1.zip`, or build it from this source.
 2. In Blender, open **Edit > Preferences > Get Extensions > menu > Install from Disk**.
 3. Select the ZIP, enable **PipeWorks**, and open **N > PipeWorks** in the 3D Viewport.
 
@@ -233,6 +234,7 @@ and installer downloads are attached to the latest release. See the
 **PipeWorks** 是 Blender 视口内的程序化画管与连接工具：确定起点，移动鼠标延长，
 按住按键转弯，按 Enter 完成。
 
+**0.5.1** 修复绘制及管口拾取时的 Alt+左/中/右键视角操作。
 **0.5.0** 增加 **E** 接续管件、库件边数版本、程序化管件长度编辑，以及一键复制 AI 管件提示词。
 
 [已发布版本](https://github.com/taoluo20/blender-pipeworks/releases/latest)
@@ -242,7 +244,7 @@ and installer downloads are attached to the latest release. See the
 
 ### 安装
 
-1. 使用随附的 `pipeworks-0.5.0.zip`，或从本仓库源码构建。
+1. 使用随附的 `pipeworks-0.5.1.zip`，或从本仓库源码构建。
 2. 打开 Blender 的 **编辑 > 偏好设置 > 获取扩展 > 菜单 > 从磁盘安装**。
 3. 选择 ZIP，启用 **PipeWorks**，在三维视图打开 **N > PipeWorks**。
 
