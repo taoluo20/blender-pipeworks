@@ -366,7 +366,7 @@ class PW_OT_pick_port(bpy.types.Operator):
         if picker is not self: return {'CANCELLED'}
         if self.area not in context.screen.areas[:] or self.area.type != 'VIEW_3D':
             self.cleanup(); return {'CANCELLED'}
-        if event.type in {'ESC', 'RIGHTMOUSE', 'WINDOW_DEACTIVATE'}:
+        if event.type in {'ESC', 'WINDOW_DEACTIVATE'} or event.type == 'RIGHTMOUSE' and not event.alt:
             self.cleanup(); return {'CANCELLED'}
         if event.type in {'MIDDLEMOUSE', 'WHEELUPMOUSE', 'WHEELDOWNMOUSE'} or event.alt:
             return {'PASS_THROUGH'}

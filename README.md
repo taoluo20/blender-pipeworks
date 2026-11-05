@@ -156,6 +156,9 @@ The turn key can be changed to B, T, F, C, or V. Pressing it returns the pointer
 to the current tip's visible guide center, even from outside the viewport with
 following or guides off. The automatic move does not add length or select a bend.
 Orbit, pan, zoom, and Alt+MMB axis-view gestures are available during drawing.
+Alt+left/middle/right mouse navigation follows your Blender keymap, including
+custom bindings and Industry Compatible. Alt+right mouse does not cancel drawing
+or port picking; unmodified right mouse still cancels.
 Dragging orbit, pan or zoom keeps the current pipe direction and gives **50%**
 length feedback. Release navigation to resume normal drawing speed.
 The first movement after navigation rebases the input without
@@ -339,7 +342,9 @@ and installer downloads are attached to the latest release. See the
 
 转弯键可选 B、T、F、C 或 V。每次开始转弯，鼠标回到当前管头的可见提示中心；
 鼠标已跑出视口、关闭跟随或隐藏提示时也能回位，自动移动不增加管长或选择弯头。
-绘制中可以旋转、平移、缩放视图，以及 Alt+中键切换轴向视角。拖动视角时保持当前
+绘制中可以旋转、平移、缩放视图，以及 Alt+中键切换轴向视角。Alt+左/中/右键沿用你的
+Blender 键位，支持自定义键位及 Industry Compatible；Alt+右键不取消绘制或管口拾取，
+单独右键仍可取消。拖动视角时保持当前
 管道方向，伸长/缩短反馈为正常速度的 **50%**，松开导航后恢复原速。导航后的首次移动
 重建输入基准且不改变管长。启用**跟随管头**后视图随管头平移，鼠标在视口边缘回卷，
 累计长度连续。起点选择器通过水平摆动确认，不需持续按键或鼠标键，摆动位移不计入管长。

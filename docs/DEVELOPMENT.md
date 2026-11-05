@@ -25,7 +25,7 @@ process to check saved language and independent RGBA preferences, then restores
 English and default white/yellow colors. It does not edit the user's regular
 Blender settings.
 
-The GUI runner starts four separate disposable windows with pre-created isolated
+The GUI runner starts five separate disposable windows with pre-created isolated
 profiles and a 180-second process timeout. It installs the release ZIP for the
 interaction suite and checks the Ctrl+P selector and native Parent restoration, six
 axes, repeated native orbit/pan/zoom/Alt+MMB and continuation, bend guides, follow toggle,
@@ -34,6 +34,11 @@ existing drawing regression. Idle/active arrow draw calls and screenshots verify
 white/yellow defaults, live custom RGBA shared across screen/world guides, reset,
 and manual-mode start/tip anchoring. Three enable/disable cycles check keymap cleanup.
 A dedicated installed-ZIP navigation suite measures exact 50% extension/retraction during native orbit, pan and drag zoom, restores normal speed after release, retains the first axis, and disables the add-on during a drag to check cleanup.
+The Alt navigation suite covers left/middle/right native navigation under custom
+Blender bindings and Industry Compatible, Follow Tip, releasing Alt before the
+mouse, waiting for a start, bends, port picking and unmodified right-mouse cancel.
+Use `--only alt-navigation` or `--only navigation alt-navigation` on the GUI runner
+to select those suites.
 Turn-pointer checks cover outside-viewport recovery, hidden guides, repeated key presses, current-tip targeting and continued extension without a length jump.
 Native event simulation suppresses OS pointer events, so the test feeds the
 requested cursor-warp destination back through Blender's event queue explicitly.

@@ -340,9 +340,10 @@ class LP_OT_draw(bpy.types.Operator):
         return any(op and op.bl_idname in NATIVE_NAVIGATION for op in self.window.modal_operators)
 
     def queue_navigation_feedback(self, context, event):
-        if not self.route or event.alt or not self.inside(event) or self._navigation_timer or self._navigation_feedback:
+        if not self.route or not self.inside(event) or self._navigation_timer or self._navigation_feedback:
             return
         self.rebase(event)
+        self._navigation_button = event.type
         self._navigation_mouse = self.mouse(event)
         self._navigation_length = self.route.length
         self._navigation_scale = self._extension_scale.copy()
@@ -355,7 +356,7 @@ class LP_OT_draw(bpy.types.Operator):
             return None
 
         # Native viewport operators consume their mouse moves. Attach above that
-        # handler after the original MMB press has reached Blender's keymap.
+        # handler after the original mouse press has reached Blender's keymap.
         self._navigation_timer = attach
         bpy.app.timers.register(attach, first_interval=0)
 
@@ -548,7 +549,7 @@ class LP_OT_draw(bpy.types.Operator):
             if not any(area == self.area for area in context.screen.areas) or self.area.spaces.active.type != 'VIEW_3D':
                 self.cleanup(context, cancel=True)
                 return {'CANCELLED'}
-            if event.type in {'ESC', 'RIGHTMOUSE', 'WINDOW_DEACTIVATE'}:
+            if event.type in {'ESC', 'WINDOW_DEACTIVATE'} or event.type == 'RIGHTMOUSE' and not event.alt:
                 self.cleanup(context, cancel=True)
                 return {'CANCELLED'}
             self.sync_view(context)
@@ -556,15 +557,15 @@ class LP_OT_draw(bpy.types.Operator):
                 self.status(context)
                 self.area.tag_redraw()
                 return {'RUNNING_MODAL'}
-            if event.type == 'MIDDLEMOUSE':
+            if event.type == 'MIDDLEMOUSE' or event.alt and event.type in {'LEFTMOUSE', 'RIGHTMOUSE'}:
                 if event.value == 'PRESS':
                     self.queue_navigation_feedback(context, event)
                 self._needs_rebase = True
                 return {'PASS_THROUGH'}
             if event.type in {'LEFT_ALT', 'RIGHT_ALT'} or (
                     event.type in {'MOUSEMOVE', 'INBETWEEN_MOUSEMOVE'} and event.alt):
-                # Alt+MMB axis gestures need mouse moves to reach Blender's keymap.
-                # Do not latch navigation: native operators can consume MMB release.
+                # Alt navigation and axis gestures need moves to reach the native keymap.
+                # Native operators can consume the initiating button's release.
                 self._needs_rebase = True
                 return {'PASS_THROUGH'}
             if event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE', 'TRACKPADPAN', 'TRACKPADZOOM', 'NDOF_MOTION'}:
@@ -804,8 +805,8 @@ class LP_OT_navigation_feedback(bpy.types.Operator):
         owner = self.owner
         if (self.done or session is not owner or owner._cleaned or
                 not owner.native_navigation_active() or
-                event.type in {'ESC', 'RIGHTMOUSE', 'WINDOW_DEACTIVATE'} or
-                event.type == 'MIDDLEMOUSE' and event.value == 'RELEASE'):
+                event.type in {'ESC', 'WINDOW_DEACTIVATE'} or
+                event.type == owner._navigation_button and event.value == 'RELEASE'):
             if owner._navigation_feedback is self:
                 owner._navigation_feedback = None
                 owner._needs_rebase = True

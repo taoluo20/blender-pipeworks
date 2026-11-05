@@ -11,15 +11,19 @@ from build import build, isolated_environment
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--blender', required=True)
+parser.add_argument('--only', nargs='+', choices=['interaction', 'routing', 'navigation', 'alt-navigation', 'connections'])
 args = parser.parse_args()
 build()
 jobs = [
     ('interaction', 'tests/gui_interaction.py', 'verification/interaction-ui', ['--', '--installed']),
     ('routing', 'tests/gui_line_pipe.py', 'verification/line-pipe/six-axis-ui', ['--', '--six-axis', '--quit']),
     ('navigation', 'tests/gui_interaction.py', 'verification/navigation-ui', ['--', '--navigation-only', '--installed']),
+    ('alt-navigation', 'tests/gui_interaction.py', 'verification/alt-navigation-ui', ['--', '--alt-navigation-only', '--installed']),
     ('connections', 'tests/gui_connections.py', 'verification/connections-ui', []),
 ]
 for name, script, directory, extra in jobs:
+    if args.only and name not in args.only:
+        continue
     out = ROOT / directory
     out.mkdir(parents=True, exist_ok=True)
     for filename in ('failure.txt', 'results.json', 'ui-checks.json', 'command.json'):

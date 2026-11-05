@@ -14,7 +14,9 @@ from bpy_extras import view3d_utils
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE = '--baseline' in sys.argv
 OUT = ROOT / 'verification' / ('interaction-baseline' if BASELINE else
+                              'alt-navigation-ui' if '--alt-navigation-only' in sys.argv else
                               'navigation-ui' if '--navigation-only' in sys.argv else 'interaction-ui')
+OUT = Path(os.environ.get('PIPEWORKS_VERIFICATION_OUT', OUT))
 OUT.mkdir(parents=True, exist_ok=True)
 for key in ('BLENDER_USER_CONFIG', 'BLENDER_USER_SCRIPTS', 'BLENDER_USER_EXTENSIONS'):
     assert Path(os.environ[key]).is_relative_to(OUT) and Path(os.environ[key]).is_dir()
@@ -201,6 +203,7 @@ def capture(name):
 def finish():
     measurements['events'] = trace
     measurements['installed_module'] = line_pipe.__name__
+    measurements['module_file'] = line_pipe.__file__
     native_parent.remove(parent_draw)
     (OUT / 'results.json').write_text(json.dumps(dict(checks=checks, measurements=measurements), indent=2))
     bpy.ops.wm.quit_blender()
@@ -317,32 +320,36 @@ def check_resume(label):
     check(label + ' restores normal drawing speed', abs(operators.session.route.length - expected) < 1e-6)
 
 
-def navigation(kind, count=1, reverse=False):
+def navigation(kind, count=1, reverse=False, alt_mouse=False, release_alt_first=False):
     for index in range(count):
-        label = kind + ' ' + str(index + 1)
+        label = ('Alt ' if alt_mouse else '') + kind + ' ' + str(index + 1)
         events.append(remember)
         if kind == 'zoom':
             events.append(lambda: event('WHEELUPMOUSE', 'PRESS', x=region.x + region.width * .4,
                                         y=region.y + region.height * .4))
         else:
-            shift = kind == 'pan'
-            alt = kind == 'axis'
-            ctrl = kind == 'drag_zoom'
-            dx, dy = (70, 0) if alt else (-45, -30) if reverse else (45, 30)
+            shift = kind == 'pan' and not alt_mouse
+            alt = kind == 'axis' or alt_mouse
+            ctrl = kind == 'drag_zoom' and not alt_mouse
+            button = ({'orbit': 'LEFTMOUSE', 'pan': 'MIDDLEMOUSE', 'drag_zoom': 'RIGHTMOUSE'}[kind]
+                      if alt_mouse else 'MIDDLEMOUSE')
+            dx, dy = (70, 0) if kind == 'axis' else (-45, -30) if reverse else (45, 30)
             if alt:
                 events.append(lambda: event('LEFT_ALT', 'PRESS', alt=True))
             events.append(
-                lambda shift=shift, alt=alt, ctrl=ctrl: event('MIDDLEMOUSE', 'PRESS', x=region.x + region.width * .4,
+                lambda shift=shift, alt=alt, ctrl=ctrl, button=button: event(button, 'PRESS', x=region.x + region.width * .4,
                                                  y=region.y + region.height * .4, shift=shift, alt=alt, ctrl=ctrl))
-            if not alt:
+            if kind != 'axis':
                 events.append(remember_navigation)
-            events.extend([
+            events.append(
                 lambda shift=shift, alt=alt, ctrl=ctrl, dx=dx, dy=dy: event('MOUSEMOVE', x=pointer[0] + dx,
                                                  y=pointer[1] + dy,
-                                                 shift=shift, alt=alt, ctrl=ctrl),
-                lambda shift=shift, alt=alt, ctrl=ctrl: event('MIDDLEMOUSE', 'RELEASE', shift=shift, alt=alt, ctrl=ctrl),
-            ])
-            if alt:
+                                                 shift=shift, alt=alt, ctrl=ctrl))
+            if alt and release_alt_first:
+                events.append(lambda: event('LEFT_ALT', 'RELEASE'))
+            events.append(lambda shift=shift, alt=alt, ctrl=ctrl, button=button: event(
+                button, 'RELEASE', shift=shift, alt=alt and not release_alt_first, ctrl=ctrl))
+            if alt and not release_alt_first:
                 events.append(lambda: event('LEFT_ALT', 'RELEASE'))
         events.extend([
             lambda label=label: check(label + ' changes native view', operators.session.view_state() != measurements['view']),
@@ -358,6 +365,47 @@ def navigation(kind, count=1, reverse=False):
             lambda label=label: resumed(label),
             lambda label=label: check_resume(label),
         ])
+
+
+def alt_keyconfig(industry=False):
+    if industry:
+        bpy.ops.preferences.keyconfig_activate(filepath=bpy.utils.preset_find('Industry_Compatible', 'keyconfig'))
+    else:
+        keymap = bpy.context.window_manager.keyconfigs.user.keymaps['3D View']
+        for name, button in (('rotate', 'LEFTMOUSE'), ('move', 'MIDDLEMOUSE'), ('zoom', 'RIGHTMOUSE')):
+            keymap.keymap_items.new('view3d.' + name, type=button, value='PRESS', alt=True, head=True)
+    measurements.setdefault('alt_keyconfigs', []).append(bpy.context.window_manager.keyconfigs.active.name)
+
+
+def passive_alt_navigation(button, mode):
+    saved = {}
+
+    def owner():
+        return line_pipe.connection_ops.picker if mode == 'picker' else operators.session
+
+    def view():
+        return (tuple(space.region_3d.view_rotation), tuple(space.region_3d.view_location),
+                space.region_3d.view_distance)
+
+    def route_state():
+        route = operators.session.route if mode != 'picker' else None
+        return (tuple(tuple(point) for point in route.points), route.length, route.turning,
+                tuple(route.candidate) if route.candidate is not None else None) if route else None
+
+    def snapshot():
+        saved.update(owner=owner(), view=view(), route=route_state())
+
+    events.extend([
+        snapshot,
+        lambda: event('LEFT_ALT', 'PRESS', alt=True),
+        lambda: event(button, 'PRESS', alt=True),
+        lambda: event('MOUSEMOVE', x=pointer[0] + 45, y=pointer[1] + 30, alt=True),
+        lambda: event(button, 'RELEASE', alt=True),
+        lambda: event('LEFT_ALT', 'RELEASE'),
+        lambda: check(mode + ' ' + button + ' changes native view and preserves tool state',
+                      owner() is not None and owner() is saved['owner']
+                      and route_state() == saved['route'] and view() != saved['view']),
+    ])
 
 
 def interaction_suite():
@@ -719,4 +767,37 @@ if '--navigation-only' in sys.argv:
                                   for op in window.modal_operators)),
         finish,
     ])
+if '--alt-navigation-only' in sys.argv:
+    events.clear()
+    for industry in (False, True):
+        events.extend([lambda industry=industry: alt_keyconfig(industry), begin, center_mouse, lambda: extend(150)])
+        for kind in ('orbit', 'pan', 'drag_zoom'):
+            navigation(kind, alt_mouse=True)
+        events.extend([lambda: setattr(bpy.context.scene.line_pipe_settings, 'follow_tip', True),
+                       lambda: extend(10), lambda: extend(70)])
+        for kind in ('orbit', 'pan', 'drag_zoom'):
+            navigation(kind, reverse=True, alt_mouse=True, release_alt_first=True)
+        events.append(lambda: event('B', 'PRESS'))
+        for button in ('LEFTMOUSE', 'MIDDLEMOUSE', 'RIGHTMOUSE'):
+            passive_alt_navigation(button, 'turning')
+        events.extend([lambda: event('B', 'RELEASE')])
+        events.extend([
+            lambda: event('ESC', 'PRESS'),
+            lambda: check('Alt navigation cancellation removes session', operators.session is None),
+            lambda: setattr(bpy.context.scene.line_pipe_settings, 'start_mode', 'SURFACE'),
+            lambda: bpy.ops.line_pipe.draw('INVOKE_DEFAULT'), center_mouse,
+        ])
+        for button in ('LEFTMOUSE', 'MIDDLEMOUSE', 'RIGHTMOUSE'):
+            passive_alt_navigation(button, 'waiting')
+        events.extend([lambda: event('ESC', 'PRESS'), begin, center_mouse, lambda: extend(120),
+                       lambda: event('RIGHTMOUSE', 'PRESS'),
+                       lambda: check('unmodified right mouse still cancels drawing', operators.session is None),
+                       lambda: event('RIGHTMOUSE', 'RELEASE'),
+                       lambda: bpy.ops.line_pipe.pick_port('INVOKE_DEFAULT', role='source')])
+        for button in ('LEFTMOUSE', 'MIDDLEMOUSE', 'RIGHTMOUSE'):
+            passive_alt_navigation(button, 'picker')
+        events.extend([lambda: event('RIGHTMOUSE', 'PRESS'),
+                       lambda: check('unmodified right mouse still cancels port picking', line_pipe.connection_ops.picker is None),
+                       lambda: event('RIGHTMOUSE', 'RELEASE')])
+    events.append(finish)
 bpy.app.timers.register(tick, first_interval=3)

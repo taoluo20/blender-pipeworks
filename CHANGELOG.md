@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Pass Alt+left/middle/right mouse navigation through to Blender during drawing,
+  start selection, bends and port picking. Alt+right mouse no longer cancels the tool.
+- Keep 50% length feedback for native Alt navigation and rebase on the initiating
+  button's release, including when Alt is released first.
+
 ## 0.5.0 - 2026-11-04
 
 - Edit the route length and profile of inserted procedural library fittings.
@@ -93,6 +100,12 @@ The internal `line_pipe` ID remains compatible with the local drawing prototype.
 ---
 
 ## 简体中文
+
+### 未发布
+
+- 绘制、起点选择、转弯和管口拾取时，Alt+左/中/右键均交给 Blender 原生导航；
+  Alt+右键不再误触发取消。
+- 原生 Alt 导航保留 50% 管长反馈，按对应鼠标键的释放重建续画基准，也支持先松开 Alt。
 
 ### 0.5.0 - 2026-11-04
 
