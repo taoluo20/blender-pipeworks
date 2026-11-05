@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.0 - 2026-11-05
+
+- Manage pipes in a searchable, collapsible group list with direct grip dragging,
+  row ordering, viewport selection and editable names.
+- Keep grouping, combining and template names in a scene-saved draft until Apply
+  to Blender. Default to a real evaluated Mesh per group; optionally keep separate
+  objects in Collections. Retain materials and external pipe-port connections.
+- Provide four naming presets, custom templates, padded numbering and a preview.
+- Support native Undo/Redo for regrouping and applying, with a complete English
+  and Simplified Chinese interface.
+- Use the newly selected Anchor, Moving Pipe and ports for every connection;
+  prevent the previous operation's hidden endpoint snapshot from overriding
+  subsequent sidebar clicks while retaining native Undo/Redo.
+- Edit the exact list or viewport selection through one live parameter editor,
+  including automatic bridges. Dragging sets the same absolute value on all
+  selected pipes immediately; groups include their members and bridges.
+- Box select by dragging across list names, with Set, Add and Remove modes;
+  synchronize checkboxes and native viewport selection. Preserve batch Undo/Redo,
+  scene-space dimensions, profile compatibility and atomic geometry validation.
+
 ## 0.5.1 - 2026-11-05
 
 - Pass Alt+left/middle/right mouse navigation through to Blender during drawing,
@@ -100,6 +120,20 @@ The internal `line_pipe` ID remains compatible with the local drawing prototype.
 ---
 
 ## 简体中文
+
+### 0.6.0 - 2026-11-05
+
+- 可搜索、折叠的管道组列表，支持按住拖柄直接拖动归组、调整顺序、视口选择及改名。
+- 分组、合并和模板名称先作为草稿随场景保存，点击应用到 Blender 后才同步。
+  默认每组真正合成 Mesh，也可保留独立对象并整理到 Collection；保留材质及外部管口连接。
+- 提供四种命名预设、自定义模板、补零编号及名称预览。
+- 归组及应用支持原生撤销重做，提供完整中英文界面。
+- 每次连接都读取新选的固定管、移动管及端口，修复上次操作的隐藏端点缓存覆盖后续
+  侧栏点击的问题，同时保留原生撤销重做。
+- 列表及视口所选管道共用实时参数编辑，包含自动补管；拖动立即将全部选中管道
+  同步为同一绝对数值，选择组包含组内成员与补管。
+- 在列表名称上拖动框选，支持替换、加选、减选模式；勾选和原生视口选择同步。
+  支持批量撤销重做、实际场景尺寸、截面一致性及整批几何验证。
 
 ### 0.5.1 - 2026-11-05
 

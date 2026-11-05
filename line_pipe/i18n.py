@@ -280,6 +280,94 @@ For E continuation, use exactly two usable mouths with identical outer diameters
 }
 
 
+MESSAGES.update({
+    'edit_title': ('Selected Pipes', '所选管道'),
+    'edit_count': ('{count} selected pipes', '已选 {count} 根管道'),
+    'edit_mixed': ('Mixed Values', '参数值不同'),
+    'edit_drag_tip': ('Drag to set this parameter to the same displayed value on every selected pipe immediately; Undo restores their previous values',
+                      '拖动时立即将所有选中管道的此参数统一为显示数值；撤销可恢复各自原值'),
+    'edit_connected_profile': ('Select all pipes at the connection to change its diameter, wall or edge count',
+                               '修改直径、壁厚或边数时，请选中连接处的全部管道及补管'),
+    'edit_mesh_tip': ('Convert every selected generated curve to an editable Mesh, preserving the selection and connections',
+                      '将选中的生成曲线全部转为可编辑 Mesh，保留选择及连接'),
+    'groups_box_tip': ('Drag across row names to box select using Set, Add or Remove mode. A group includes its pipes.',
+                        '在行名称上拖动框选，使用替换、加选或减选模式。选择组包含组内管道。'),
+    'selection_mode': ('Selection', '选择方式'),
+    'groups_selection_set': ('Set', '替换'),
+    'groups_selection_add': ('Add', '加选'),
+    'groups_selection_remove': ('Remove', '减选'),
+    'groups_selection_mode_tip': ('Replace the selection, add rows, or remove rows when dragging across names',
+                                  '拖动行名称时替换选择、加入条目或移除条目'),
+    'selection_handle': ('Select Pipes', '选择管道'),
+    'name': ('Name', '名称'),
+    'selected': ('Select', '选择'),
+    'expanded': ('Expand Group', '展开分组'),
+    'search': ('Search', '搜索'),
+    'drag_handle': ('Move', '移动'),
+    'apply_mode': ('Apply As', '应用方式'),
+    'presets': ('Preset', '预设'),
+    'template': ('Template', '模板'),
+    'template_scope': ('Rename', '改名范围'),
+    'start_index': ('Start Number', '起始编号'),
+    'groups_mesh_mode': ('Mesh Objects', '合成 Mesh'),
+    'groups_collection_mode': ('Collections', '保留独立对象'),
+    'groups_selected': ('Selected Rows', '勾选行'),
+    'groups_pipes': ('All Pipes', '所有管道'),
+    'groups_groups': ('All Groups', '所有分组'),
+    'groups_all': ('All Rows', '所有行'),
+    'groups_preset_group': ('Group + Pipe Number', '组名与管道编号'),
+    'groups_preset_pipe': ('Pipe Number', '管道编号'),
+    'groups_preset_number': ('Group Number', '分组编号'),
+    'groups_preset_original': ('Original Name + Number', '原名加编号'),
+    'groups_preset_custom': ('Custom Template', '自定义模板'),
+    'groups_templates': ('Naming Templates', '命名模板'),
+    'show_templates': ('Naming Templates', '命名模板'),
+    'groups_templates_tip': ('Show naming presets, the custom template and its preview', '显示命名预设、自定义模板及名称预览'),
+    'groups_pending': ('Pending', '待应用'),
+    'groups_synced': ('Synced', '已同步'),
+    'groups_rename': ('Rename in List', '在列表中改名'),
+    'groups_apply': ('Apply to Blender', '应用到 Blender'),
+    'groups_applied': ('Applied {count} list entries to Blender', '已将 {count} 个列表条目应用到 Blender'),
+    'groups_name_tip': ('Stage this name in the list; object names change only on Apply to Blender', '先在插件列表中暂存名称，点击应用到 Blender 后才同步物体名称'),
+    'groups_select_tip': ('Select this pipe or group for viewport selection, shared parameter editing and list operations',
+                          '选中此管道或分组，同步视口选择并用于共用参数修改及列表操作'),
+    'groups_expand_tip': ('Expand or collapse the pipes in this group', '展开或折叠本组管道'),
+    'groups_search_tip': ('Filter staged pipe and group names', '筛选暂存的管道与分组名称'),
+    'groups_apply_mode_tip': ('Merge each group into one evaluated Mesh, or organize Collections with independent objects', '每个组真正合成一个 Mesh，或整理为 Collection 并保留独立对象'),
+    'groups_template_tip': ('Fields: {group}, {type}, {name}, {index:03d}, {diameter:.3f}; only list names change', '可用字段：{group}、{type}、{name}、{index:03d}、{diameter:.3f}；只修改插件列表名称'),
+    'groups_scope_tip': ('Choose which staged rows receive the naming template', '选择应用命名模板的列表条目范围'),
+    'groups_start_tip': ('First number used by the naming template', '命名模板使用的第一个编号'),
+    'groups_preset_tip': ('Choose a naming template preset', '选择一个命名模板预设'),
+    'groups_drag_tip': ('Drag to reorder rows or drop into a group; Escape cancels without changing the scene', '拖动调整顺序或放入分组；Esc 取消，不修改场景物体'),
+    'groups_apply_tip': ('Commit staged names and groups to Blender; merging bakes evaluated geometry and supports Undo', '将暂存名称及分组应用到 Blender；合成会烘焙求值后的几何，支持撤销'),
+    'groups_action_refresh': ('Add new scene pipes to the list while preserving staged edits', '将场景中新管道加入列表，保留暂存修改'),
+    'groups_action_reset': ('Reload groups and names from the scene, discarding pending list edits', '从场景重新读取分组及名称，放弃尚未应用的列表修改'),
+    'groups_action_add': ('Add an empty staged group', '添加一个暂存空组'),
+    'groups_action_group': ('Combine checked rows or selected viewport pipes into one staged group', '将勾选条目或视口所选管道合为一个暂存组'),
+    'groups_action_ungroup': ('Ungroup checked rows in the list; scene geometry is unchanged', '在列表中取消勾选条目的分组，场景几何不变'),
+    'groups_action_move': ('Move a staged row', '移动暂存条目'),
+    'groups_action_up': ('Move the active row up', '上移当前条目'),
+    'groups_action_down': ('Move the active row down', '下移当前条目'),
+    'groups_action_select': ('Select this pipe or group in the viewport', '在视口中选中此管道或分组'),
+    'groups_action_viewport': ('Check the rows corresponding to the viewport selection', '勾选视口所选物体对应的列表条目'),
+    'groups_action_template': ('Stage template names in the list without renaming scene objects', '按模板暂存列表名称，尚不修改场景物体名称'),
+    'groups_action_preset': ('Load the selected naming preset into the template', '将所选命名预设载入模板'),
+    'groups_drop_into': ('Into {name}', '放入 {name}'),
+    'groups_drop_before': ('Before {name}', '移到 {name} 前'),
+    'groups_drop_after': ('After {name}', '移到 {name} 后'),
+    'groups_choose_rows': ('Check list rows or select pipes in the viewport first', '请先勾选列表条目或在视口选择管道'),
+    'groups_empty_name': ('Names cannot be empty', '名称不能为空'),
+    'groups_bad_template': ('Invalid template; use group, type, name, index or diameter fields', '模板无效；可使用 group、type、name、index、diameter 字段'),
+    'groups_missing_source': ('A listed object is missing from this scene; reset the list before applying', '列表中有物体已不在当前场景，请重新载入列表后再应用'),
+    'groups_duplicate_source': ('A pipe appears more than once in the list', '同一管道在列表中出现多次'),
+    'groups_readonly': ('Applying needs editable objects belonging only to this scene', '应用需要可编辑且仅属于当前场景的物体'),
+    'groups_empty_group': ('Group {name} is empty', '分组 {name} 为空'),
+    'groups_external_child': ('Keep parented children in the same merge group, or apply as Collections', '请将父子物体放入同一合成组，或选择保留独立对象'),
+    'groups_partial_bridge': ('Merge a bridge with both of its connected pipes, or apply as Collections', '补管须与其连接的两根管道一起合成，或选择保留独立对象'),
+    'groups_empty_mesh': ('A listed pipe has no evaluated mesh faces', '列表中有管道未生成有效网格面'),
+})
+
+
 def language(context=None):
     context = context or bpy.context
     addon = context.preferences.addons.get(__package__)
@@ -297,9 +385,9 @@ def text(key, lang):
     return MESSAGES[key][lang == 'ZH']
 
 
-def prop(layout, data, key, context):
+def prop(layout, data, key, context, **kwargs):
     suffix = '_zh' if language(context) == 'ZH' else ''
-    layout.prop(data, key + suffix, text=tr(key, context))
+    layout.prop(data, key + suffix, text=tr(key, context), **kwargs)
 
 
 def add_chinese_properties(cls, tips):

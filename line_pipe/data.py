@@ -158,10 +158,10 @@ def generation_sides(settings):
     return sides if settings.free_sides or sides in ports.STANDARD_SIDES else ports.DEFAULT_SIDES
 
 
-def sides_menu(layout, settings, context):
+def sides_menu(layout, settings, context, slider=False):
     i18n.prop(layout, settings, 'free_sides', context)
     if settings.free_sides:
-        i18n.prop(layout, settings, 'radial_segments', context)
+        i18n.prop(layout, settings, 'radial_segments', context, slider=slider)
     else:
         row = layout.row()
         row.label(text=i18n.tr('radial_segments', context))
@@ -312,6 +312,15 @@ class LP_OT_drag_sides(bpy.types.Operator):
                                     origin=event.mouse_prev_press_x,
                                     step=max(1, round(24 * context.preferences.system.ui_scale)),
                                     initial=initial, count=initial, counts=counts, index=counts.index(initial))
+        self.drag.live = settings.bl_rna.identifier == 'PW_EditSettings'
+        self.drag.committed = False
+        if self.drag.live:
+            from . import editing
+            self.drag.original = [(obj.name, current['radial_segments'], current['free_sides'])
+                                  for obj in editing.targets(context) for current in [editing.values(obj)]]
+            settings.radial_segments = initial
+            if settings.error:
+                return {'CANCELLED'}
         self.drag.window.cursor_modal_set('SCROLL_X')
         context.window_manager.modal_handler_add(self)
         _preset_drag = self.drag
@@ -323,18 +332,25 @@ class LP_OT_drag_sides(bpy.types.Operator):
             return {'CANCELLED'}
         if drag.area not in drag.window.screen.areas[:] or event.type in {'ESC', 'RIGHTMOUSE', 'WINDOW_DEACTIVATE'}:
             self.cancel(context)
-            return {'CANCELLED'}
+            return {'CANCELLED', 'PASS_THROUGH'} if event.type == 'ESC' else {'CANCELLED'}
         release = event.type == 'LEFTMOUSE' and event.value == 'RELEASE'
         # A fast click-drag can release while Blender is installing the modal handler.
-        previous_release = event.type_prev == 'LEFTMOUSE' and event.value_prev == 'RELEASE'
+        previous_release = not drag.live and event.type_prev == 'LEFTMOUSE' and event.value_prev == 'RELEASE'
         if event.type in {'MOUSEMOVE', 'INBETWEEN_MOUSEMOVE'} or release or previous_release:
             x = event.mouse_prev_x if previous_release and not release else event.mouse_x
             offset = int((x - drag.origin) / drag.step)
             index = max(0, min(drag.index + offset, len(drag.counts) - 1))
             drag.count = drag.counts[index]
+            if drag.live and drag.settings.radial_segments != drag.count:
+                drag.settings.radial_segments = drag.count
+                drag.count = drag.settings.radial_segments
             drag.area.tag_redraw()
         if release or previous_release:
             passthrough = {'PASS_THROUGH'} if previous_release and not release else set()
+            if drag.live:
+                drag.committed = True
+                self.cancel(context)
+                return {'FINISHED', 'PASS_THROUGH'}
             self.cancel(context)
             if drag.count == drag.initial:
                 return {'CANCELLED'} | passthrough
@@ -353,6 +369,21 @@ class LP_OT_drag_sides(bpy.types.Operator):
 def abort_preset_drag():
     global _preset_drag
     drag, _preset_drag = _preset_drag, None
+    if drag is not None and getattr(drag, 'live', False) and not drag.committed:
+        from . import editing
+        original = {}
+        flags = {}
+        for name, count, free in drag.original:
+            obj = bpy.context.scene.objects.get(name)
+            if obj:
+                original.setdefault(count, []).append(obj)
+                flags.setdefault(free, []).append(obj)
+        # Restore connected edge rings together before restoring per-object UI modes.
+        for count, objects in original.items():
+            editing.update_objects(bpy.context, objects, {'radial_segments': count})
+        for free, objects in flags.items():
+            editing.update_objects(bpy.context, objects, {'free_sides': free})
+        editing.sync_editor(bpy.context, force=True)
     if drag is not None and drag.window in bpy.context.window_manager.windows[:]:
         drag.window.cursor_modal_restore()
         if drag.area in drag.window.screen.areas[:]:

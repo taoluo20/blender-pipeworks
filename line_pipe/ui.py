@@ -14,23 +14,6 @@ def dimensions(layout, settings, context):
             i18n.prop(layout, settings, 'wall' if settings.wall_mode == 'FREE' else 'wall_preset', context)
 
 
-def has_selected_recipe(context):
-    obj = context.active_object
-    return obj and obj.type in {'CURVE', 'MESH'} and obj.get('line_pipe_route_v1') and not obj.get(ports.CUSTOM)
-
-
-def selected_parameters(layout, context):
-    obj = context.active_object
-    col = layout.column()
-    col.enabled = operators.session is None and context.mode == 'OBJECT'
-    dimensions(col, obj.line_pipe, context)
-    i18n.prop(col, obj.line_pipe, 'route_length', context)
-    if obj.line_pipe.error:
-        col.label(text=i18n.tr(obj.line_pipe.error, context), icon='ERROR')
-    if obj.type == 'CURVE':
-        col.operator('line_pipe.mesh', text=i18n.tr('mesh', context), icon='MESH_DATA')
-
-
 class LP_PT_main(bpy.types.Panel):
     bl_label = 'PipeWorks'
     bl_idname = 'LP_PT_main'
@@ -97,10 +80,28 @@ class LP_PT_main(bpy.types.Panel):
         row = col.row()
         row.scale_y = 1.3
         row.operator('line_pipe.draw', text=i18n.tr('draw', context), icon='CURVE_PATH')
-        if has_selected_recipe(context):
-            layout.separator()
-            layout.label(text=i18n.tr('active', context), icon='OUTLINER_OB_CURVE')
-            selected_parameters(layout, context)
 
 
-CLASSES = (LP_PT_main,)
+class LP_PT_selection(bpy.types.Panel):
+    bl_label = ''
+    bl_idname = 'LP_PT_selection'
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = 'PipeWorks'
+    bl_parent_id = 'LP_PT_main'
+
+    @classmethod
+    def poll(cls, context):
+        from . import editing
+        return (operators.session is None and context.mode == 'OBJECT'
+                and context.scene.line_pipe_settings.tool_mode != 'GROUPS' and bool(editing.targets(context)))
+
+    def draw_header(self, context):
+        self.layout.label(text=i18n.tr('edit_title', context))
+
+    def draw(self, context):
+        from . import editing
+        editing.draw(self.layout, context)
+
+
+CLASSES = (LP_PT_main, LP_PT_selection)

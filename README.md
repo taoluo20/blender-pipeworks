@@ -5,6 +5,10 @@ point, extend with the mouse, hold a key to turn, and press Enter to finish.
 
 **English** · [简体中文](#简体中文)
 
+**0.6.0** adds a staged Groups list, direct dragging and naming
+templates, synchronized list/viewport box selection and one live parameter editor
+for selected pipes and automatic bridges, and fixes repeated Anchor/port selection.
+
 **0.5.1** fixes Alt+left/middle/right mouse navigation during drawing and port picking.
 **0.5.0** adds **E** fitting continuation, edge-count variants in the library,
 editable procedural fitting lengths, and a copyable AI fitting specification.
@@ -16,7 +20,7 @@ editable procedural fitting lengths, and a copyable AI fitting specification.
 
 ## Install
 
-1. Use the supplied `pipeworks-0.5.1.zip`, or build it from this source.
+1. Download `pipeworks-0.6.0.zip` from the latest release, or build it from this source.
 2. In Blender, open **Edit > Preferences > Get Extensions > menu > Install from Disk**.
 3. Select the ZIP, enable **PipeWorks**, and open **N > PipeWorks** in the 3D Viewport.
 
@@ -27,6 +31,50 @@ preference saving is enabled; otherwise save Blender preferences manually.
 
 The internal extension ID remains `line_pipe` for existing scenes. Update an
 existing Line Pipe installation rather than enabling two copies.
+
+## Stage Groups And Names
+
+Open **Groups** to organize pipes in a list. Check rows and use the group action,
+or drag a row's grip onto a group. Drop above or below rows to reorder; drop above
+or below a root group to take a pipe out of its current group. Click a row name to
+select its pipe or entire group. Drag across row names to box select; the selection
+menu beside Search offers Set, Add and Remove. List checkboxes and viewport selection stay synchronized.
+Search reveals matching pipes
+and their groups; the active row also has a full-width Name field.
+
+Names and groups stay in a scene-saved draft. **Apply to Blender** defaults to
+**Mesh Objects**, baking every staged group into one Mesh object. **Collections**
+keeps separate editable objects and synchronizes their names and group collections.
+Ungrouped pipes are renamed without conversion. This joins objects rather than
+performing a boolean union or welding their geometry. Native Undo restores the
+original objects and staged list.
+
+**Naming Templates** offers group + pipe numbering, pipe numbering, group
+numbering, original name + numbering, and a custom pattern. Choose checked rows,
+all pipes, all groups or all rows, set the starting number and inspect the preview.
+**Rename in List** changes only the draft. Available fields are `{group}`, `{type}`,
+`{name}`, `{index:03d}` and `{diameter:.3f}`; diameter is in scene units. For example,
+`{group}_{index:03d}` produces `Cooling_001`, `Cooling_002`.
+
+Refresh imports new scene pipes while preserving pending edits. Reset reloads the
+scene's names and discards draft edits. Merge a bridge with both connected pipes,
+or use Collections to keep a bridge independently editable.
+
+## Edit Selected Pipes
+
+Use **Selected Pipes** for one pipe, any number of selected pipes, or a selected
+list group. Automatic distance bridges use the same controls. Blender viewport
+box selection and dragging across list rows define the same editing selection.
+Dragging a parameter immediately sets every selected pipe to the displayed
+absolute number and keeps updating while the mouse is held. Other parameters and
+unselected pipes retain their values. One Undo restores the previous values.
+
+Diameter, bend radius and wall thickness use physical scene units, including
+uniformly scaled objects. A connected diameter, wall or edge-count edit needs all
+affected pipes and bridges selected together. Geometry is built and validated
+before changing any selected object. Generated curves can be converted together
+to Mesh to expose hollow-wall controls. Authored or baked merged Meshes keep their
+geometry; apply groups as Collections to retain individual procedural editing.
 
 ## Connect Pipes
 
@@ -50,10 +98,9 @@ both ends have matching bores; a solid/hollow pair produces a solid bridge.
 Connections are modeling joins between separate editable objects, with saved link
 records. They are not boolean welds or a fluid simulation.
 
-Successful connections merge the two PipeWorks groups. For manual grouping, select
-pipes and use **Groups > Group Selected**. Grouping includes each selected pipe's
-existing group. Use **Select Entire Group** to select its members. Disconnect new links
-before separating a connected group. **Disconnect Active Pipe** releases links involving the
+Successful connections merge the two PipeWorks groups. For manual organization,
+use the staged Groups list described above; click a group name to select its members.
+**Disconnect Active Pipe** releases links involving the
 active pipe and removes their generated bridges. It does not move directly docked
 pipes back. Historical links owned by the old add-on are not rewritten.
 
@@ -84,7 +131,8 @@ before use.
 
 - New pipes default to 60 edges. Presets are 6, 12, 24, 36, 48, 60, 72, 144,
   288 and 576. Hold the number and drag horizontally to step through presets,
-  or click the adjacent arrow to choose directly. Release to apply. Turn on
+  or click the adjacent arrow to choose directly. Drawing defaults apply on release;
+  the Selected Pipes editor updates live while dragging. Turn on
   **Custom Edge Count** to enter another count.
 - Equal edge counts can connect. With two differing presets, only the second
   pipe is retessellated, provided its recipe is safe to rebuild and its other
@@ -231,6 +279,9 @@ and installer downloads are attached to the latest release. See the
 
 ## 简体中文
 
+**0.6.0** 新增暂存组列表、直接拖动、命名模板、列表/视口同步框选，以及
+所选管道和自动补管共用的实时参数编辑，并修复连续操作时的 Anchor 与管口选择。
+
 **PipeWorks** 是 Blender 视口内的程序化画管与连接工具：确定起点，移动鼠标延长，
 按住按键转弯，按 Enter 完成。
 
@@ -244,7 +295,7 @@ and installer downloads are attached to the latest release. See the
 
 ### 安装
 
-1. 使用随附的 `pipeworks-0.5.1.zip`，或从本仓库源码构建。
+1. 从最新发布页下载 `pipeworks-0.6.0.zip`，或从本仓库源码构建。
 2. 打开 Blender 的 **编辑 > 偏好设置 > 获取扩展 > 菜单 > 从磁盘安装**。
 3. 选择 ZIP，启用 **PipeWorks**，在三维视图打开 **N > PipeWorks**。
 
@@ -252,6 +303,40 @@ and installer downloads are attached to the latest release. See the
 点击 **English** 切回英文。启用自动保存偏好时会记忆语言；否则手动保存 Blender
 偏好设置。内部扩展 ID 保留 `line_pipe`，兼容已有场景；已有 Line Pipe 安装应直接
 升级，避免同时启用两份。
+
+### 暂存分组与名称
+
+打开「组」以列表管理管道。勾选条目后使用归组操作，或按住拖柄拖到一个组上。
+放到行的上方或下方可调整顺序；放到顶层组的上方或下方可将管道移出当前组。
+点击行名称可选中单根管道或整个组；在名称上拖动可框选，搜索旁可切换替换、加选、减选。
+列表勾选与视口选择同步。搜索显示匹配管道及所属组，当前行另有完整名称编辑框。
+
+名称与分组先作为草稿随场景保存。「应用到 Blender」默认「合成 Mesh」，
+每组真正生成一个 Mesh 对象；选择「保留独立对象」则同步名称并整理到 Collection。
+未分组管道只改名，不转换。合成是合并对象，不进行布尔并集或焊接网格。
+原生撤销可恢复原物体及暂存列表。
+
+「命名模板」提供组名与管道编号、管道编号、分组编号、原名加编号及自定义模式。
+可选择勾选行、所有管道、所有分组或全部条目，并设置起始编号、查看预览。
+「在列表中改名」仅修改草稿。可用字段：`{group}`、`{type}`、`{name}`、
+`{index:03d}`、`{diameter:.3f}`，直径使用场景单位。例如 `{group}_{index:03d}`
+生成 `Cooling_001`、`Cooling_002`。
+
+刷新会补入新管道并保留草稿；重新载入会放弃草稿、读取场景中的名称。
+补管需与连接的两根管道一起合成，或选择保留独立对象以保持补管可编辑。
+
+### 修改所选管道
+
+「所选管道」共用一套控件，支持单根、多根、列表分组及自动距离补管。
+Blender 视口框选和在列表行名称上拖动框选使用相同的修改范围。
+拖动参数时，所有选中管道立即统一为控件显示的绝对数值，并在按住鼠标期间持续同步；
+其他参数及未选管道保持原值。一次撤销可恢复各自原来的数值。
+
+直径、弯曲半径和壁厚以实际场景单位处理，包含均匀缩放物体。
+修改相连截面的直径、壁厚或边数时，需要同时选中相关管道及补管。
+所有几何先生成、验证后再统一替换，避免部分成功。选中的生成曲线可一起转 Mesh，
+再使用空管和壁厚控件。手工网格及烘焙合并 Mesh 保留原几何；需要保留逐根程序化编辑时，
+分组应用请选择「保留独立对象」。
 
 ### 连接管道
 
@@ -270,8 +355,7 @@ and installer downloads are attached to the latest release. See the
 实心与中空混接生成实心连接段。这是保留独立可编辑对象和连接记录的建模连接，
 不进行布尔焊接或流体模拟。
 
-连接成功会合并两个 PipeWorks 组。手动分组使用**分组 > 选中管道编组**，
-会包含每条所选管道原组的全部成员；用**选择整个管道组**选择成员。相连组需先断开连接才能拆组。
+连接成功会合并两个 PipeWorks 组。手动整理使用上文的暂存分组列表，点击组名选择组内成员。
 **断开当前管道**释放与活动管道有关的新连接，并删除对应桥接段；直接吸附后的管道仍留在当前位置。
 旧插件自己保存的历史连接不自动改写。
 
@@ -293,7 +377,7 @@ and installer downloads are attached to the latest release. See the
 
 ### 边数、自定义管口与管件库
 
-- 新管道默认 60 边。预设为 6、12、24、36、48、60、72、144、288、576。按住数字左右拖动换档，松手应用，也可点旁边的箭头直选。开启**自由边数**可输入其他边数。
+- 新管道默认 60 边。预设为 6、12、24、36、48、60、72、144、288、576。按住数字左右拖动换档，也可点旁边的箭头直选。绘制默认参数松手应用；所选管道编辑器在拖动期间实时同步。开启**自由边数**可输入其他边数。
 - 两口边数相同可连接。不同且都在预设中时，仅在第二件可安全重建且其他口未占用的情况下改第二件。
   库件始终要求实际边数一致，保留作者的管口边环。其他不匹配会报出两口的边数。
   直连滚转吸附到顶点对齐角度，补管两端分别匹配实际边环。

@@ -441,7 +441,8 @@ for cls, tips in ((PW_ConnectionSettings, dict(roll='conn_roll_tip', distance='c
 
 
 for cls in (PW_OT_connect_direct, PW_OT_connect_distance):
-    cls.__annotations__.update({key: StringProperty(options={'HIDDEN'}) for key in
+    # Retain endpoints for this operation's redo without reusing them on the next click.
+    cls.__annotations__.update({key: StringProperty(options={'HIDDEN', 'SKIP_SAVE'}) for key in
                                ('source_name', 'source_key', 'target_name', 'target_key')})
 
 

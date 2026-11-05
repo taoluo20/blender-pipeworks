@@ -37,17 +37,14 @@ def draw_connections(layout, context, groups_only=False):
         for key in ('distance', 'radius', 'smooth'): i18n.prop(box, state, key, context)
         box.operator('line_pipe.connect_distance', text=i18n.tr('conn_bridge', context))
     else:
+        from . import groups
+        groups.draw_groups(layout, context)
         layout.enabled = connection_ops.ready(context)
         obj = context.active_object
         state = context.scene.line_pipe_connections
         if ports.is_pipe(obj):
             layout.separator()
-            layout.label(text=i18n.tr('conn_groups', context))
-            layout.label(text=i18n.tr('conn_group_count', context, count=len(ports.members(context.scene, obj))))
-            row = layout.row(align=True)
-            row.operator('line_pipe.group_pipes', text=i18n.tr('conn_group', context))
-            row.operator('line_pipe.group_pipes', text=i18n.tr('conn_ungroup', context)).separate = True
-            layout.operator('line_pipe.group_pipes', text=i18n.tr('conn_select_group', context)).select = True
+            layout.label(text=i18n.tr('tool_connect', context))
             layout.operator('line_pipe.sync_curvature', text=i18n.tr('conn_curvature', context))
             layout.operator('line_pipe.disconnect', text=i18n.tr('conn_disconnect', context))
             layout.operator('line_pipe.update_connections', text=i18n.tr('conn_update', context))

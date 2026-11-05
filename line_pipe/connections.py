@@ -238,6 +238,7 @@ def bridge(context, source, source_key, target, target_key, radius=.4, smooth=Tr
             context.collection.objects.link(obj)
             obj.location = origin
             store_path(obj, recipe)
+            geometry.remember_mesh(obj)
             merge_groups(context.scene, source, target, obj)
             record = new_link(context.scene, source, source_key, target, target_key, 'BRIDGE', obj, radius, smooth)
             record.max_distance, record.sides = max_distance, a.sides
@@ -579,6 +580,7 @@ def update_bridges(context, use_settings=False):
         obj = record.connector
         old = swap_data(obj, block)
         store_path(obj, recipe)
+        geometry.remember_mesh(obj)
         record.radius, record.smooth, record.max_distance, record.sides = radius, recipe['smooth'], distance, recipe['sides']
         discard(old)
     context.view_layer.update()

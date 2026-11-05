@@ -166,6 +166,42 @@ def prepare_library():
     view.view_perspective = 'PERSP'
 
 
+def prepare_groups():
+    from line_pipe import connections, data, geometry, groups
+    bpy.context.scene.line_pipe_connections.links.clear()
+    for obj in tuple(bpy.context.scene.objects):
+        bpy.data.objects.remove(obj, do_unlink=True)
+
+    def pipe(name, points, color):
+        obj = geometry.create(bpy.context)
+        obj.name, obj.color = name, color
+        data.store_parameters(obj, .3, .5, 60, 16, [False, 'FREE', .02, '10'])
+        geometry.update(obj, points, .3, .5, 60, 16, store=True)
+        return obj
+
+    a = pipe('Supply', [(0, 0, 0), (2, 0, 0), (2, 0, 2)], (.12, .48, .8, 1))
+    b = pipe('Return', [(5, 3, 2), (7, 3, 2), (7, 3, 0)], (.16, .65, .4, 1))
+    pipe('Auxiliary', [(0, 5, 0), (2.5, 5, 0), (2.5, 5, 2.5)], (.52, .64, .72, 1))
+    bpy.context.view_layer.update()
+    bridge = connections.bridge(bpy.context, a, 'END', b, 'START', .5, True, 20)
+    bridge.color = (.95, .58, .12, 1)
+    groups.refresh(bpy.context.scene, reset=True)
+    state = groups.state_for(bpy.context.scene)
+    group = next(row for row in state.items if row.kind == 'GROUP')
+    group.name = 'Cooling'
+    for row in groups.children(state, group.uid):
+        row.name = 'Cooling_Link' if row.source == bridge else 'Cooling_' + row.source.name
+    state.show_templates, state.template_scope = True, 'PIPES'
+    groups.select_rows(bpy.context, [group.uid])
+    bpy.context.scene.line_pipe_settings.tool_mode = 'GROUPS'
+    space = area_context()['area'].spaces.active
+    space.shading.color_type = 'OBJECT'
+    space.region_3d.view_rotation = Euler((1.3, 0, .4)).to_quaternion()
+    space.region_3d.view_location = (3, 2, 1.1)
+    space.region_3d.view_distance = 14
+    space.region_3d.view_perspective = 'PERSP'
+
+
 def finish():
     (OUT / 'capture-result.json').write_text(json.dumps({
         'product': 'PipeWorks', 'screenshots': captures, 'perspective': True,
@@ -205,6 +241,9 @@ actions.extend([
     prepare_connections, lambda: capture('pipeworks-connections.png'),
     prepare_library, lambda: capture('pipeworks-library-en.png'),
     lambda: bpy.ops.line_pipe.language(), lambda: capture('pipeworks-library-zh.png'),
+    lambda: bpy.ops.line_pipe.language(),
+    prepare_groups, lambda: capture('pipeworks-groups-en.png'),
+    lambda: bpy.ops.line_pipe.language(), lambda: capture('pipeworks-groups-zh.png'),
     lambda: bpy.ops.line_pipe.language(),
     finish,
 ])

@@ -21,6 +21,8 @@ jobs = [
     ('compact', ['--factory-startup', '--python', 'tests/check_compact_bends.py'], out / 'compact-user'),
     ('connections', ['--factory-startup', '--python', 'tests/check_connections.py'], out / 'connections-user'),
     ('profiles', ['--factory-startup', '--python', 'tests/check_profiles.py'], out / 'profiles-user'),
+    ('groups', ['--factory-startup', '--python', 'tests/check_groups.py'], out / 'groups-user'),
+    ('selection-edit', ['--factory-startup', '--python', 'tests/check_selection_edit.py'], out / 'selection-edit-user'),
     ('connection-restart', ['--factory-startup', '--python', 'tests/check_connection_restart.py'], out / 'connection-restart-user'),
     ('installed', ['--factory-startup', '--python', 'tests/check_installed_line_pipe.py'], out / 'install-user'),
     ('restart', ['--python', 'tests/check_installed_line_pipe.py', '--', '--reload-preferences'], out / 'install-user'),

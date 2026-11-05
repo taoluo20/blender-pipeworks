@@ -579,7 +579,7 @@ def draw_ports(layout, context):
 
 
 def draw_library(layout, context):
-    from .ui import dimensions, has_selected_recipe, selected_parameters
+    from .ui import dimensions
     settings = context.scene.line_pipe_settings
     box = layout.box()
     box.label(text=i18n.tr('builtin_fittings', context))
@@ -592,11 +592,6 @@ def draw_library(layout, context):
     if panel:
         dimensions(panel, settings, context)
         i18n.prop(panel, settings, 'template_length', context)
-    if has_selected_recipe(context):
-        header, panel = layout.panel('pipeworks_selected_parameters', default_closed=True)
-        header.label(text=i18n.tr('active', context))
-        if panel:
-            selected_parameters(panel, context)
     box = layout.box()
     box.label(text=i18n.tr('my_fittings', context))
     box.operator('line_pipe.copy_fitting_prompt', text=i18n.tr('copy_fitting_prompt', context), icon='COPYDOWN')

@@ -3,23 +3,25 @@
 import bpy
 from bpy.app.handlers import persistent
 from bpy.props import PointerProperty
-from . import data, operators, ui, connection_ops, connection_ui, fittings
+from . import data, operators, ui, connection_ops, connection_ui, fittings, groups, editing
 
 bl_info = {
-    'name': 'PipeWorks', 'author': 'O_Pisces', 'version': (0, 5, 1),
+    'name': 'PipeWorks', 'author': 'O_Pisces', 'version': (0, 6, 0),
     'blender': (5, 2, 0), 'location': 'View3D > Sidebar > PipeWorks',
     'description': 'Draw pipes, connect ports and match group bend radii', 'category': 'Add Curve',
 }
 _registered = False
 _keymaps = []
-CLASSES = data.CLASSES + operators.CLASSES + ui.CLASSES + connection_ops.CLASSES + connection_ui.CLASSES + fittings.CLASSES
+CLASSES = data.CLASSES + editing.CLASSES + operators.CLASSES + ui.CLASSES + connection_ops.CLASSES + connection_ui.CLASSES + fittings.CLASSES + groups.CLASSES
 
 
 @persistent
 def before_scene_change(_):
+    editing.abort()
     data.abort_preset_drag()
     connection_ops.abort()
     operators.abort()
+    groups.abort()
 
 
 def register():
@@ -34,6 +36,8 @@ def register():
     bpy.types.WindowManager.line_pipe_preset_drag = data.preset_drag_property('EN')
     bpy.types.WindowManager.line_pipe_preset_drag_zh = data.preset_drag_property('ZH')
     bpy.types.Scene.line_pipe_connections = PointerProperty(type=connection_ops.PW_ConnectionSettings)
+    bpy.types.Scene.line_pipe_groups = PointerProperty(type=groups.PW_GroupState)
+    bpy.types.Scene.line_pipe_edit = PointerProperty(type=editing.PW_EditSettings)
     bpy.types.VIEW3D_MT_object_context_menu.append(connection_ui.context_menu)
     keyconfig = bpy.context.window_manager.keyconfigs.addon
     if keyconfig:
@@ -52,9 +56,11 @@ def unregister():
     global _registered
     if not _registered:
         return
+    editing.abort()
     data.abort_preset_drag()
     connection_ops.abort()
     operators.abort()
+    groups.unregister_callbacks()
     fittings.unregister_overlay()
     data.cancel_preferences_save()
     for keymap, item in _keymaps:
@@ -69,6 +75,8 @@ def unregister():
     del bpy.types.WindowManager.line_pipe_preset_drag
     del bpy.types.WindowManager.line_pipe_preset_drag_zh
     del bpy.types.Scene.line_pipe_connections
+    del bpy.types.Scene.line_pipe_groups
+    del bpy.types.Scene.line_pipe_edit
     bpy.types.VIEW3D_MT_object_context_menu.remove(connection_ui.context_menu)
     for cls in reversed(CLASSES):
         bpy.utils.unregister_class(cls)

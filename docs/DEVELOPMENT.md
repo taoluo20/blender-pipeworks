@@ -11,7 +11,7 @@ python tests/run_gui_checks.py --blender /path/to/blender
 ```
 
 On Windows, pass the full path to `blender.exe` as a quoted argument. The build
-produces `dist/pipeworks-0.5.1.zip` and `dist/SHA256SUMS.txt`. ZIP timestamps,
+produces `dist/pipeworks-0.6.0.zip` and `dist/SHA256SUMS.txt`. ZIP timestamps,
 permissions, order, and compression are fixed; repeated builds with the same
 Python/zlib toolchain compare byte for byte. Compression bytes can differ between
 toolchain versions. Release 0.2.0 uses Blender's bundled Python 3.13.13.
@@ -25,7 +25,7 @@ process to check saved language and independent RGBA preferences, then restores
 English and default white/yellow colors. It does not edit the user's regular
 Blender settings.
 
-The GUI runner starts five separate disposable windows with pre-created isolated
+The GUI runner starts separate disposable windows with pre-created isolated
 profiles and a 180-second process timeout. It installs the release ZIP for the
 interaction suite and checks the Ctrl+P selector and native Parent restoration, six
 axes, repeated native orbit/pan/zoom/Alt+MMB and continuation, bend guides, follow toggle,
@@ -39,6 +39,10 @@ Blender bindings and Industry Compatible, Follow Tip, releasing Alt before the
 mouse, waiting for a start, bends, port picking and unmodified right-mouse cancel.
 Use `--only alt-navigation` or `--only navigation alt-navigation` on the GUI runner
 to select those suites.
+The group suite covers real UI grip presses, staged dragging and cancellation,
+template names, both application modes and their native Undo/Redo, and bilingual
+screenshots. `tests/check_groups.py` covers draft persistence, reordering, name
+collisions, world-space merged ports, materials, bridge references and rollback.
 Turn-pointer checks cover outside-viewport recovery, hidden guides, repeated key presses, current-tip targeting and continued extension without a length jump.
 Native event simulation suppresses OS pointer events, so the test feeds the
 requested cursor-warp destination back through Blender's event queue explicitly.
@@ -61,6 +65,20 @@ pointers, occupancy, native Mesh parameters and bridge updates. The GUI connecti
 suite covers port picking, roll preview/cancel/confirm, native Undo/Redo for all
 three operations, the context menu, language and modal cleanup. Use
 `tests/gui_connections.py -- --manual` without event simulation for Windows input.
+Use `--only endpoint-selection` to check repeated native sidebar connections,
+all four Start/End combinations in both languages, changed object/port choices,
+Undo/Redo, distance connections and named ports on merged Meshes. These tests
+invoke native buttons and a native keymap command: Python `bpy.ops` calls alone
+do not reproduce Blender reusing the previous operation's hidden defaults.
+Use `--only selection-edit` for native list selection, box add/subtract/cancel,
+viewport box selection and English/Chinese parameter dragging before release.
+It also redraws the Library in both languages with the shared selection editor.
+All native GUI runs fail on unexpected Python tracebacks, including panel draw errors.
+Physical Windows input also checks rectangle release and the next selection;
+the simulator needs an extra release to clear its retained native row button.
+Numeric hover and press use separate event-queue ticks, as in hardware input.
+`tests/check_selection_edit.py` checks exact two/three-object edits, bridges,
+scaled dimensions, linked profiles, whole-batch refusal and save/reopen.
 
 `tests/check_profiles.py` verifies real ring counts, ordered profile matching,
 edge-phase alignment, hollow thickness, ten authored ports and single-fitting
@@ -83,7 +101,7 @@ Generate an example in an isolated factory-startup process with
 rotated matched groups and a free trial pair. Inspect a fresh installed-ZIP restart
 before supplying that scene.
 Examples, verification output, profiles, installers, and publishing receipts are
-ignored. Only this repository's 16-file `line_pipe/` extension is packaged.
+ignored. Only this repository's 18-file `line_pipe/` extension is packaged.
 
 ## Release Procedure
 
@@ -104,7 +122,7 @@ ignored. Only this repository's 16-file `line_pipe/` extension is packaged.
 无需 pip 依赖。上方命令运行便携检查、可选 Blender 清单验证、完整集成及原生交互。
 Windows 中以引号包裹 `blender.exe` 的完整路径。
 
-构建输出 `dist/pipeworks-0.5.1.zip` 和 `SHA256SUMS.txt`。ZIP 的时间戳、权限、
+构建输出 `dist/pipeworks-0.6.0.zip` 和 `SHA256SUMS.txt`。ZIP 的时间戳、权限、
 文件顺序和压缩固定，相同 Python/zlib 工具链下重复构建逐字节相同；不同工具链
 版本的压缩字节可能不同。0.2.0 发布包使用 Blender 自带 Python 3.13.13。
 CI 检查语法、产品元数据、独立范围、
@@ -115,7 +133,7 @@ CI 检查语法、产品元数据、独立范围、
 颜色记忆，然后恢复英文和白/黄默认色。
 不会修改用户常用 Blender 配置。
 
-新增 GUI 运行器使用预先创建的隔离配置，先后启动四个临时窗口，每个进程限制
+新增 GUI 运行器使用预先创建的隔离配置，先后启动独立临时窗口，每个进程限制
 180 秒。交互套件安装真实发布 ZIP，覆盖 Ctrl+P 选择器及原生 Parent 恢复、六轴、
 多次原生旋转/平移/缩放及 Alt+中键后的续画、弯头辅助、跟随切换、稳定输入比例、边缘回卷、
 紧凑单弯/连续弯、取消与原有绘制回归。绘制调用和截图验证白/黄默认箭头、
@@ -136,6 +154,15 @@ CI 检查语法、产品元数据、独立范围、
 的新进程，读取源码生成的场景，检查连接对象指针、端口占用、原生 Mesh 参数和桥接更新。
 GUI 连接套件覆盖管口点选、滚转预览/取消/确认、三种操作的原生撤销/重做、右键、语言和清理。
 真实 Windows 输入使用 `tests/gui_connections.py -- --manual`，不加事件模拟。
+使用 `--only endpoint-selection` 检查连续点击原生侧栏连接、中英文四种首末口组合、
+更换对象与端口、撤销重做、距离连接及合并 Mesh 的命名管口。该套件使用原生按钮
+及临时原生快捷键；仅调用 Python `bpy.ops` 无法复现 Blender 复用上次隐藏参数的问题。
+`--only selection-edit` 覆盖列表点选、框选加减与取消、视口框选，以及松开鼠标前的
+中英文参数同步。数字控件的悬停与按下分开发送到事件队列，与硬件输入一致。
+另覆盖中英文管件库的共用参数面板重绘。所有原生界面检查遇到意外 Python 堆栈错误时失败，包含面板绘制错误。
+另以 Windows 实际鼠标验证框选松手及后续选择；模拟器需多发一次松手以清理其保留的原生行按钮。
+`tests/check_selection_edit.py` 覆盖精确两根/三根修改、补管、缩放尺寸、连接截面、
+整批失败保持原样与保存重开。
 
 `tests/check_profiles.py` 在隔离配置的临时库中验证实际边数、按顺序匹配、边环相位、壁厚、
 十个自定义管口以及单件导出导入。

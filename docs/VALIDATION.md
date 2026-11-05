@@ -1,5 +1,37 @@
 # Validation
 
+## 0.6.0 - 2026-11-05
+
+Blender 5.2.2 checks passed:
+
+- 61 group backend assertions: staging isolation, grip move data, ordering, naming
+  presets, custom templates, scene-unit diameters, save/reopen, real Mesh merging,
+  Collections, material/port preservation, external links and atomic refusal.
+- 15 installed-ZIP UI assertions: real grip-button presses and drops, cancellation,
+  native Undo/Redo, template staging, both apply modes and bilingual layout.
+- 42 selection-edit backend assertions: exact two/three-object scope, staged group
+  selection, automatic and older unsigned bridges, scaled dimensions, consistent
+  connected profiles, mixed custom-count cancellation, atomic refusal and reopen.
+- 24 installed-ZIP selection UI assertions: absolute parameter values synchronize
+  while the mouse is held in English and Chinese; continued movement, single-step
+  Undo/Redo, live edge presets, cancellation, list Set/Add/Remove and viewport boxes.
+- Physical Windows mouse input verified list rectangle release, two-row selection,
+  changing Set/Add modes and adding a bridge after a rectangle. The automated
+  event simulator uses one extra release to clear its retained native row button.
+- Existing integration, compact bends, connection backend, profile variants,
+  installed package, saved connections and preference restart suites passed.
+- English/Chinese Library redraws use the shared selection panel. Native GUI
+  runners reject unexpected Python tracebacks even when Blender exits normally.
+- Existing native navigation (83), Alt navigation (126) and connections (35) passed.
+- 79 additional installed-ZIP endpoint UI assertions: successive native sidebar
+  clicks, all four Start/End pairs in both languages, changed Anchor and Moving
+  objects, pair/individual picking, cancellation, Undo/Redo, native distance
+  commands and a merged Mesh's named mouth. Reproduced the stale Start-Start
+  snapshot before the fix. Connection backend (206), groups (61), connection UI
+  (35) and a fresh installed-ZIP connection restart passed after the fix.
+- The local installed add-on was backed up; all 18 installed files match the ZIP.
+  Regular Blender preferences were not changed.
+
 ## 0.5.1 - 2026-11-05
 
 - 126 native Alt navigation assertions cover custom Blender bindings and Industry
@@ -228,6 +260,25 @@ unfreed-memory diagnostics; assertions and process exit codes are recorded.
 ---
 
 ## 简体中文
+
+### 0.6.0 - 2026-11-05
+
+Blender 5.2.2 验证通过：61 项分组后端、15 项真实安装包界面操作，
+包含直接按住拖柄归组、取消、撤销重做、模板改名暂存及两种应用方式。
+另通过 42 项批量编辑后端检查：精确两根/三根范围、暂存组选择、自动及旧版补管、
+缩放尺寸、连接截面一致、不同自定义边数开关的取消恢复、整批拒绝及保存重开。
+24 项真实安装包界面检查覆盖中英文拖动未松手时的绝对数值同步、持续更新、一步撤销重做、
+边数预设实时拖动与取消、列表替换/加选/减选及视口框选。
+Windows 实际鼠标验证了列表框选松手、两行选区、切换替换/加选及框选后加入补管。
+自动事件模拟需多发一次松手以清理其保留的原生行按钮，实际鼠标操作另行验证。
+既有后端、短弯、连接、截面版本、真实安装、保存连接及偏好重启测试通过；
+中英文管件库重绘使用共用所选管道面板；原生界面检查即使正常退出也会拒绝意外 Python 堆栈错误。
+83 项原生导航、126 项 Alt 导航、35 项连接界面检查通过。
+另通过 79 项真实安装包端口界面回归：连续点击原生侧栏按钮、中英文四种首末口组合、
+更换固定与移动对象、双口及单口拾取、取消、撤销重做、原生距离连接及合并 Mesh 的命名管口。
+修复前复现了旧 Start-Start 缓存覆盖新选择的问题；修复后 206 项连接后端、61 项分组、
+35 项既有连接界面及新进程恢复保存连接检查通过。
+本机旧插件已备份，安装目录 18 个文件与本地 ZIP 一致，常规 Blender 偏好未修改。
 
 ### 0.5.1 - 2026-11-05
 
